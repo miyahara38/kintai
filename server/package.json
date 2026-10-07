@@ -1,0 +1,17 @@
+{
+  "name": "kintai-server",
+  "version": "1.0.0",
+  "description": "社内LAN専用 QR出退勤打刻 + 残業管理システム",
+  "private": true,
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "setup": "node scripts/setup.js",
+    "create-admin": "node scripts/create-admin.js",
+    "backup": "node scripts/backup.js",
+    "restore": "node scripts/restore.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": { "node": ">=22.13" },
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,1723 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="format-detection" content="telephone=no">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none';">
+<title>勤怠・残業管理（スマホ版）</title>
+<style>
+:root{
+  --bg:#f1f5f9; --card:#fff; --line:#e2e8f0; --line2:#cbd5e1; --text:#1e293b; --sub:#64748b; --muted:#94a3b8;
+  --blue:#2563eb; --blue-bg:#eff6ff; --blue-line:#bfdbfe;
+  --amber:#d97706; --amber-bg:#fffbeb; --amber-line:#fde68a;
+  --green:#059669; --green-bg:#ecfdf5; --green-line:#a7f3d0;
+  --red:#dc2626; --red-bg:#fef2f2; --red-line:#fecaca;
+  --purple:#9333ea; --purple-bg:#faf5ff; --purple-line:#e9d5ff;
+  --sky:#0369a1; --sky-bg:#f0f9ff; --sky-line:#bae6fd;
+  --rose:#e11d48; --rose-bg:#fff1f2; --rose-line:#fecdd3;
+  --nav-h:62px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",Meiryo,sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.5;padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 20px);-webkit-tap-highlight-color:transparent}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+.hidden{display:none!important}
+
+/* ヘッダー */
+header.app{position:sticky;top:0;z-index:20;background:#0f172a;color:#fff;padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;display:flex;align-items:center;gap:10px}
+.logo{background:var(--blue);border-radius:8px;font-weight:700;font-size:12px;padding:5px 7px;letter-spacing:.03em}
+header h1{font-size:15px;font-weight:700;line-height:1.3}
+header .hsub{font-size:10.5px;color:#94a3b8}
+
+main{padding:12px 12px 0;max-width:640px;margin:0 auto}
+.view{display:none}
+.view.active{display:block}
+
+/* カード・フォーム */
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.card-title{font-size:15px;font-weight:700;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.field{margin-bottom:12px}
+.label{display:block;font-size:12px;font-weight:600;color:#334155;margin-bottom:4px}
+.req{color:var(--red)}
+.input{display:block;width:100%;min-width:0;min-height:46px;border:1px solid var(--line2);border-radius:10px;padding:9px 12px;font-size:16px;background:#fff;-webkit-appearance:none;appearance:none}
+textarea.input{min-height:72px;resize:vertical}
+select.input{padding-right:34px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2364748b' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+.input::-webkit-date-and-time-value{text-align:left}
+.input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+.input:disabled{background:#f8fafc;color:var(--muted)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.range{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center}
+.range .tilde{color:var(--muted);font-size:14px}
+.preview{font-size:12.5px;color:var(--blue);background:var(--blue-bg);border:1px solid var(--blue-line);border-radius:10px;padding:8px 10px;margin-bottom:12px;font-weight:600}
+.panel{border-radius:12px;padding:12px;margin-bottom:12px;border:1px solid}
+.panel.sky{background:var(--sky-bg);border-color:var(--sky-line)}
+.panel.green{background:var(--green-bg);border-color:var(--green-line)}
+.panel.amber{background:var(--amber-bg);border-color:var(--amber-line)}
+.panel-title{font-size:12.5px;font-weight:700;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.panel.sky .panel-title{color:#0c4a6e}
+.panel.green .panel-title{color:#064e3b}
+.panel.amber .panel-title{color:#78350f}
+.pill{font-size:11px;font-weight:600;background:#fff;border:1px solid var(--amber-line);color:#92400e;border-radius:999px;padding:1px 8px;white-space:nowrap}
+.note{font-size:11.5px;color:var(--sub);margin-top:6px}
+.panel.sky .note{color:var(--sky)}
+.panel.amber .note{color:#b45309;margin:0 0 8px}
+
+.slots-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:8px;gap:8px}
+.slots-head .t{font-size:13px;font-weight:700}
+.slots-head .s{font-size:11px;color:var(--sub)}
+.slots-head .total{font-size:12px;font-weight:700;color:var(--blue);white-space:nowrap}
+.slot{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px}
+.slot-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:700;color:#475569;margin-bottom:6px}
+.slot .input{min-height:44px}
+.slot .memo-in{margin-top:6px;font-size:16px}
+.mini{border:0;background:none;color:var(--muted);font-size:12px;padding:4px 6px;border-radius:6px}
+.mini:active{background:var(--line)}
+
+.alert{border-radius:10px;padding:10px 12px;font-size:12.5px;margin-bottom:12px;border:1px solid}
+.alert.ok{background:var(--green-bg);border-color:var(--green-line);color:#065f46}
+.alert.ng{background:var(--red-bg);border-color:var(--red-line);color:#991b1b}
+.editbar{background:var(--amber-bg);border:1px solid var(--amber-line);color:#92400e;font-size:12.5px;font-weight:600;border-radius:10px;padding:9px 12px;margin-bottom:12px}
+
+.btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:50px;border:0;border-radius:12px;font-weight:700;font-size:15px}
+.btn + .btn{margin-top:8px}
+.btn:active{opacity:.85}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-amber{background:var(--amber);color:#fff}
+.btn-ghost{background:#e2e8f0;color:#334155}
+.btn-green{background:var(--green);color:#fff}
+.btn-red{background:#fff;color:var(--red);border:1.5px solid var(--red-line)}
+.btn-dashed{background:#fff;border:1.5px dashed var(--line2);color:var(--blue);min-height:44px;font-size:14px;margin-bottom:4px}
+
+/* 期間切替・絞り込み */
+.period{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+.pbtn{min-width:42px;min-height:42px;border:1px solid var(--line2);background:#fff;border-radius:10px;font-size:13px;color:#475569}
+.pbtn.now{color:var(--blue);border-color:var(--blue-line);font-weight:700;font-size:12px}
+.pbtn:active{background:#f1f5f9}
+.plabel{flex:1;text-align:center;font-size:13.5px;font-weight:700;line-height:1.3}
+.plabel small{display:block;font-size:10.5px;color:var(--amber);font-weight:600}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:#e2e8f0;border-radius:10px;padding:3px;gap:3px;margin-bottom:10px}
+.seg button{border:0;background:none;border-radius:8px;min-height:36px;font-size:13px;font-weight:600;color:var(--sub)}
+.seg button.on{background:#fff;color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.search{position:relative}
+.search .input{padding-left:36px}
+.search::before{content:"🔍";position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:13px;opacity:.6}
+.listmeta{font-size:12px;color:var(--sub);margin:2px 4px 8px;display:flex;justify-content:space-between}
+
+/* レコードカード */
+.rec{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px}
+.rec-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.rec-date{font-size:12px;color:var(--sub)}
+.rec-name{font-size:16px;font-weight:700;word-break:break-all;line-height:1.35}
+.badges{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.b-normal{background:#f1f5f9;color:#334155}
+.b-half{background:#e0f2fe;color:var(--sky)}
+.b-holiday{background:#d1fae5;color:#047857}
+.b-part{background:#d1fae5;color:#047857}
+.b-ok{background:#d1fae5;color:#065f46}
+.b-ng{background:#fee2e2;color:#991b1b}
+.b-gray{background:#f1f5f9;color:#475569}
+.b-over{background:#fef3c7;color:#92400e}
+.rec-body{margin-top:8px;font-size:13px}
+.slotline{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-bottom:4px;font-size:12.5px;word-break:break-all}
+.slotline b{color:var(--blue)}
+.slotline .memo{color:var(--sub)}
+.ptmemo{background:var(--amber-bg);border:1px solid var(--amber-line);border-radius:8px;padding:6px 8px;font-size:12.5px;color:#78350f;word-break:break-all}
+.muted{color:var(--muted);font-style:italic;font-size:12.5px}
+.rec-total{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:8px;font-size:13px;font-weight:700}
+.t-blue{color:var(--blue)} .t-purple{color:var(--purple)} .t-green{color:var(--green)} .t-sub{color:var(--muted);font-weight:500;font-size:11.5px;align-self:center}
+.rec-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px}
+.act{min-height:40px;border-radius:10px;border:1px solid var(--line);background:#fff;font-size:13px;font-weight:600;color:#475569}
+.act:active{background:#f1f5f9}
+.act.edit{background:var(--amber-bg);border-color:var(--amber-line);color:#b45309}
+.act.del{color:var(--red);border-color:var(--red-line)}
+.empty{text-align:center;color:var(--muted);font-size:13px;padding:36px 0}
+
+/* 集計 */
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tile{border-radius:12px;padding:10px 12px;border:1px solid}
+.tile span{font-size:11.5px;color:var(--sub);display:block}
+.tile b{font-size:18px;line-height:1.3}
+.tile.wide{grid-column:1/-1}
+.tile.c-blue{background:var(--blue-bg);border-color:var(--blue-line)}
+.tile.c-amber{background:var(--amber-bg);border-color:var(--amber-line)}
+.tile.c-green{background:var(--green-bg);border-color:var(--green-line)}
+.tile.c-rose{background:var(--rose-bg);border-color:var(--rose-line)}
+.tile.c-purple{background:var(--purple-bg);border-color:var(--purple-line)}
+.tile.c-slate{background:#f8fafc;border-color:var(--line)}
+.filtered{font-size:11.5px;color:#b45309;background:var(--amber-bg);border:1px solid var(--amber-line);border-radius:8px;padding:6px 10px;margin-bottom:10px}
+.small{font-size:11.5px;color:var(--sub);margin-top:8px}
+details.card summary{font-weight:700;font-size:14px;list-style:none;display:flex;justify-content:space-between;align-items:center}
+details.card summary::-webkit-details-marker{display:none}
+details.card summary .off{font-size:11px;color:var(--green);font-weight:600}
+details.card .sec{margin-top:10px;font-size:12px;color:#334155}
+details.card .sec p + p{margin-top:6px}
+
+/* 下部タブ */
+nav.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:rgba(255,255,255,.97);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(3,1fr);padding-bottom:env(safe-area-inset-bottom)}
+.tab{height:var(--nav-h);border:0;background:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11px;color:var(--sub);font-weight:600}
+.tab .ic{font-size:21px;line-height:1;filter:grayscale(1);opacity:.6}
+.tab.active{color:var(--blue)}
+.tab.active .ic{filter:none;opacity:1}
+
+/* ボトムシート・トースト */
+.sheet-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:#fff;width:100%;max-width:640px;max-height:82vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
+.sheet h3{font-size:15px;margin-bottom:2px}
+.sheet .sub{font-size:12px;color:var(--sub);margin-bottom:8px}
+.hist-item{border-top:1px solid var(--line);padding:10px 0;font-size:12.5px;word-break:break-all}
+.hist-item .when{font-weight:700;font-size:12px;color:#334155;margin-bottom:4px}
+.hist-item .mode{display:inline-block;font-size:10.5px;background:#f1f5f9;border-radius:999px;padding:1px 8px;margin-left:4px;color:#475569}
+.hist-item ul{list-style:none}
+.hist-item li{padding-left:10px;text-indent:-10px}
+.hist-item li::before{content:"・"}
+.toast{position:fixed;left:50%;bottom:calc(var(--nav-h) + env(safe-area-inset-bottom) + 14px);transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 18px;border-radius:999px;font-size:13px;font-weight:600;z-index:60;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div class="logo">ATT</div>
+  <div>
+    <h1>出退勤・残業管理</h1>
+    <div class="hsub">スマホ版 / 端末内に自動保存・外部通信なし</div>
+  </div>
+</header>
+
+<main>
+  <!-- ========== 入力 ========== -->
+  <section id="viewInput" class="view active">
+    <div id="editBar" class="editbar hidden">✏️ 修正モード：保存すると既存データを上書きします</div>
+
+    <form id="overtimeForm" class="card" autocomplete="off">
+      <div class="card-title"><span id="formTitle">📝 勤怠・残業申請の入力</span></div>
+      <input type="hidden" id="editingId" value="">
+
+      <div class="field">
+        <label class="label" for="staffName">スタッフ名 <span class="req">*</span></label>
+        <input type="text" id="staffName" class="input" required maxlength="50" placeholder="例: 山田 太郎" list="staffList" enterkeyhint="next">
+        <datalist id="staffList"></datalist>
+      </div>
+
+      <div class="row2 field">
+        <div>
+          <label class="label" for="date">日付 <span class="req">*</span></label>
+          <input type="date" id="date" class="input" required>
+        </div>
+        <div>
+          <label class="label" for="workType">勤務区分</label>
+          <select id="workType" class="input">
+            <option value="normal">通常出勤</option>
+            <option value="half">半日出勤</option>
+            <option value="holiday">休日出勤</option>
+            <option value="parttime">パート勤務</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="shiftPreview" class="preview">定時: -</div>
+
+      <!-- 正社員：勤務体系 -->
+      <div id="patternGroup" class="field">
+        <label class="label" for="pattern">勤務体系パターン</label>
+        <select id="pattern" class="input">
+          <option value="pattern1">パターン1（月金09:00 / 火木土09:20）</option>
+          <option value="pattern2">パターン2（月金09:20 / 火木土09:00）</option>
+        </select>
+      </div>
+
+      <!-- 正社員：半日 -->
+      <div id="halfDayGroup" class="panel sky hidden">
+        <div class="panel-title">🕐 半日勤務時間</div>
+        <select id="halfShift" class="input">
+          <option value="am0900">09:00〜13:00</option>
+          <option value="am0920">09:20〜13:20</option>
+          <option value="pm1430">14:30〜18:30</option>
+          <option value="pm1450">14:50〜18:50</option>
+        </select>
+        <p class="note">※月・金の14:30開始は17:50以降を残業申請できます。土曜の14:50開始は18:30終了です。</p>
+      </div>
+
+      <!-- パート：所定時間 -->
+      <div id="partTimeBaseGroup" class="panel green hidden">
+        <div class="panel-title">⚙️ パート基本所定時間</div>
+        <div class="range">
+          <input type="time" id="ptBaseStart" class="input" value="09:00" aria-label="基本開始時刻">
+          <span class="tilde">〜</span>
+          <input type="time" id="ptBaseEnd" class="input" value="18:30" aria-label="基本終了時刻">
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="label" for="breakMinutes">休憩時間（分）</label>
+        <input type="number" id="breakMinutes" class="input" value="90" min="0" step="5" inputmode="numeric">
+      </div>
+
+      <!-- パート：残業申請 -->
+      <div id="partTimeMemoGroup" class="panel amber hidden">
+        <div class="panel-title">
+          <span>📝 所定外労働の申請</span>
+          <span id="ptOvertimeDisplay" class="pill">加算残業: 0分</span>
+        </div>
+        <p class="note">※18:30以降や休憩中の勤務は、申請がない限り労働時間に反映されません。</p>
+        <div class="field">
+          <label class="label" for="partTimeOverMin">承認された残業時間（分）</label>
+          <input type="number" id="partTimeOverMin" class="input" value="0" min="0" step="5" inputmode="numeric" placeholder="例: 30">
+        </div>
+        <div>
+          <label class="label" for="partTimeMemo">残業理由・業務説明</label>
+          <textarea id="partTimeMemo" class="input" rows="2" maxlength="300" placeholder="例: 患者対応延長のため18:30〜19:00まで残業"></textarea>
+        </div>
+      </div>
+
+      <div id="discrepancyAlert" class="alert hidden"></div>
+
+      <!-- 正社員：残業枠 -->
+      <div id="fullTimeSlotsGroup">
+        <div class="slots-head">
+          <div>
+            <div class="t">残業申請枠（任意・最大4枠）</div>
+            <div class="s">始業前・昼休み・終業後の残業を入力</div>
+          </div>
+          <span id="slotTotalCalc" class="total">合計 0時間0分</span>
+        </div>
+
+        <div class="slot" data-slot="1">
+          <div class="slot-head"><span>残業枠 1</span><button type="button" class="mini" data-clear="1">クリア</button></div>
+          <div class="range">
+            <input type="time" id="s1Start" class="input slot-input" aria-label="枠1 開始">
+            <span class="tilde">〜</span>
+            <input type="time" id="s1End" class="input slot-input" aria-label="枠1 終了">
+          </div>
+          <input type="text" id="s1Memo" class="input memo-in" maxlength="200" placeholder="残業内容・理由メモ">
+        </div>
+        <div class="slot hidden" data-slot="2">
+          <div class="slot-head"><span>残業枠 2</span><button type="button" class="mini" data-clear="2">クリア</button></div>
+          <div class="range">
+            <input type="time" id="s2Start" class="input slot-input" aria-label="枠2 開始">
+            <span class="tilde">〜</span>
+            <input type="time" id="s2End" class="input slot-input" aria-label="枠2 終了">
+          </div>
+          <input type="text" id="s2Memo" class="input memo-in" maxlength="200" placeholder="残業内容・理由メモ">
+        </div>
+        <div class="slot hidden" data-slot="3">
+          <div class="slot-head"><span>残業枠 3</span><button type="button" class="mini" data-clear="3">クリア</button></div>
+          <div class="range">
+            <input type="time" id="s3Start" class="input slot-input" aria-label="枠3 開始">
+            <span class="tilde">〜</span>
+            <input type="time" id="s3End" class="input slot-input" aria-label="枠3 終了">
+          </div>
+          <input type="text" id="s3Memo" class="input memo-in" maxlength="200" placeholder="残業内容・理由メモ">
+        </div>
+        <div class="slot hidden" data-slot="4">
+          <div class="slot-head"><span>残業枠 4</span><button type="button" class="mini" data-clear="4">クリア</button></div>
+          <div class="range">
+            <input type="time" id="s4Start" class="input slot-input" aria-label="枠4 開始">
+            <span class="tilde">〜</span>
+            <input type="time" id="s4End" class="input slot-input" aria-label="枠4 終了">
+          </div>
+          <input type="text" id="s4Memo" class="input memo-in" maxlength="200" placeholder="残業内容・理由メモ">
+        </div>
+        <button type="button" id="btnAddSlot" class="btn btn-dashed">＋ 残業枠を追加</button>
+      </div>
+
+      <div style="margin-top:14px">
+        <button type="submit" id="btnSubmit" class="btn btn-primary">勤怠・残業データを登録する</button>
+        <button type="button" id="btnCancelEdit" class="btn btn-ghost hidden">編集をキャンセル</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- ========== 一覧 ========== -->
+  <section id="viewList" class="view">
+    <div class="card">
+      <div class="period">
+        <button type="button" class="pbtn js-prev" aria-label="前の集計期間">◀</button>
+        <div class="plabel"><span class="js-plabel">-</span><small class="js-pnote"></small></div>
+        <button type="button" class="pbtn js-next" aria-label="次の集計期間">▶</button>
+        <button type="button" class="pbtn now js-now">今期</button>
+      </div>
+      <div class="seg" id="listScope">
+        <button type="button" data-scope="period" class="on">この期間のみ</button>
+        <button type="button" data-scope="all">すべて</button>
+      </div>
+      <div class="search">
+        <input type="search" id="filterStaff" class="input" placeholder="スタッフ名で絞り込み">
+      </div>
+    </div>
+    <div class="listmeta"><span id="listCount">0件</span><span>日付順</span></div>
+    <div id="recordList"></div>
+  </section>
+
+  <!-- ========== 集計・出力 ========== -->
+  <section id="viewSummary" class="view">
+    <div class="card">
+      <div class="card-title">📊 期間集計</div>
+      <div class="period">
+        <button type="button" class="pbtn js-prev" aria-label="前の集計期間">◀</button>
+        <div class="plabel"><span class="js-plabel">-</span><small class="js-pnote"></small></div>
+        <button type="button" class="pbtn js-next" aria-label="次の集計期間">▶</button>
+        <button type="button" class="pbtn now js-now">今期</button>
+      </div>
+      <div id="summaryFiltered" class="filtered hidden"></div>
+      <div class="tiles">
+        <div class="tile c-blue"><span>通常残業</span><b id="periodNormalOver">0時間0分</b></div>
+        <div class="tile c-amber"><span>半日出勤</span><b id="periodHalfOver">0時間0分</b></div>
+        <div class="tile c-green"><span>休日出勤（8h内）</span><b id="periodHoliday">0時間0分</b></div>
+        <div class="tile c-rose"><span>休日8h超</span><b id="periodHolidayOver8">0時間0分</b></div>
+        <div class="tile c-purple wide"><span>深夜残業（22時〜5時）</span><b id="periodNight">0時間0分</b></div>
+        <div class="tile c-slate wide"><span>パート合計労働時間</span><b id="periodPartTime">0時間0分</b></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📤 Excel出力</div>
+      <button type="button" id="btnExportXlsx" class="btn btn-green">📊 Excel出力（A4横印刷）</button>
+      <p class="small">一覧の絞り込み条件が反映されます。下部の月間集計は上で選んでいる期間で計算されます。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🗑️ データ管理</div>
+      <button type="button" id="btnDeleteAll" class="btn btn-red">残業申請データを一括削除</button>
+      <p class="small">※この端末・このブラウザに保存されたデータが対象です。元に戻せません。</p>
+    </div>
+
+    <details class="card">
+      <summary><span>🛡️ セキュリティ情報</span><span class="off">完全オフライン</span></summary>
+      <div class="sec">
+        <p><b>外部通信:</b> 無効。外部CDN・外部APIは使用しません。</p>
+        <p><b>XSS対策:</b> スタッフ名・残業理由などの自由入力はHTMLとして実行されないよう無害化しています。</p>
+        <p><b>Excel出力対策:</b> 自由入力は文字列セルとして書き込むため、「=」等で始まる入力があっても数式として実行されません。</p>
+        <p><b>保存先:</b> データはこのスマホのブラウザ内にのみ保存されます。PCや他の端末とは共有されません。</p>
+        <p style="color:#b45309"><b>注意:</b> 端末とブラウザ保存領域に管理者レベルでアクセスできる人による意図的な改ざんを、HTML単体で完全に防止することはできません。</p>
+      </div>
+    </details>
+  </section>
+</main>
+
+<nav class="tabbar">
+  <button type="button" class="tab active" data-view="input"><span class="ic">📝</span>入力</button>
+  <button type="button" class="tab" data-view="list"><span class="ic">📋</span>一覧</button>
+  <button type="button" class="tab" data-view="summary"><span class="ic">📊</span>集計・出力</button>
+</nav>
+
+<div id="historySheet" class="sheet-bg hidden">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <h3>修正履歴</h3>
+    <div id="historySub" class="sub"></div>
+    <div id="historyBody"></div>
+    <button type="button" id="btnCloseHistory" class="btn btn-ghost" style="margin-top:12px">閉じる</button>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+    const SHIFT_PATTERNS = {
+        pattern1: {
+            0: { str: "休日", start: "", end: "", breakMin: 0 },
+            1: { str: "09:00〜13:00 / 14:30〜17:50", start: "09:00", end: "17:50", breakMin: 90 },
+            2: { str: "09:20〜13:20 / 14:50〜18:50", start: "09:20", end: "18:50", breakMin: 90 },
+            3: { str: "09:00〜13:00 / 14:30〜18:30", start: "09:00", end: "18:30", breakMin: 90 },
+            4: { str: "09:20〜13:20 / 14:50〜18:50", start: "09:20", end: "18:50", breakMin: 90 },
+            5: { str: "09:00〜13:00 / 14:30〜17:50", start: "09:00", end: "17:50", breakMin: 90 },
+            6: { str: "09:20〜13:20 / 14:50〜18:30", start: "09:20", end: "18:30", breakMin: 90 }
+        },
+        pattern2: {
+            0: { str: "休日", start: "", end: "", breakMin: 0 },
+            1: { str: "09:20〜13:20 / 14:50〜18:10", start: "09:20", end: "18:10", breakMin: 90 },
+            2: { str: "09:00〜13:00 / 14:30〜18:30", start: "09:00", end: "18:30", breakMin: 90 },
+            3: { str: "09:20〜13:20 / 14:50〜18:50", start: "09:20", end: "18:50", breakMin: 90 },
+            4: { str: "09:00〜13:00 / 14:30〜18:30", start: "09:00", end: "18:30", breakMin: 90 },
+            5: { str: "09:20〜13:20 / 14:50〜18:10", start: "09:20", end: "18:10", breakMin: 90 },
+            6: { str: "09:00〜13:00 / 14:30〜18:30", start: "09:00", end: "18:30", breakMin: 90 }
+        }
+    };
+
+    const HALF_SHIFTS = {
+        am0900: { start: "09:00", end: "13:00", label: "09:00〜13:00" },
+        am0920: { start: "09:20", end: "13:20", label: "09:20〜13:20" },
+        pm1430: { start: "14:30", end: "18:30", label: "14:30〜18:30" },
+        pm1450: { start: "14:50", end: "18:50", label: "14:50〜18:50" }
+    };
+
+    const WEEK_DAYS = ["日", "月", "火", "水", "木", "金", "土"];
+    // PC版と同じ保存キー・同じデータ形式（互換性維持）
+    const STORAGE_KEY = "overtime_records";
+
+    let overtimeRecords = [];
+    try {
+        const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        if (Array.isArray(parsed)) overtimeRecords = parsed;
+    } catch (e) {
+        console.warn("Storage access failed:", e);
+    }
+
+    const $ = id => document.getElementById(id);
+    const form = $("overtimeForm");
+    const staffNameInput = $("staffName");
+    const dateInput = $("date");
+    const workTypeSelect = $("workType");
+    const patternSelect = $("pattern");
+    const patternGroup = $("patternGroup");
+    const halfDayGroup = $("halfDayGroup");
+    const halfShiftSelect = $("halfShift");
+    const partTimeBaseGroup = $("partTimeBaseGroup");
+    const partTimeMemoGroup = $("partTimeMemoGroup");
+    const fullTimeSlotsGroup = $("fullTimeSlotsGroup");
+    const ptBaseStart = $("ptBaseStart");
+    const ptBaseEnd = $("ptBaseEnd");
+    const partTimeOverMinInput = $("partTimeOverMin");
+    const partTimeMemoInput = $("partTimeMemo");
+    const breakInput = $("breakMinutes");
+    const shiftPreview = $("shiftPreview");
+    const discrepancyAlert = $("discrepancyAlert");
+    const slotTotalCalc = $("slotTotalCalc");
+    const ptOvertimeDisplay = $("ptOvertimeDisplay");
+    const editingIdInput = $("editingId");
+    const formTitle = $("formTitle");
+    const editBar = $("editBar");
+    const btnSubmit = $("btnSubmit");
+    const btnCancelEdit = $("btnCancelEdit");
+    const btnAddSlot = $("btnAddSlot");
+    const filterStaff = $("filterStaff");
+    const recordList = $("recordList");
+
+    let visibleSlots = 1;
+    let listScope = "period";
+
+    // ---------- 共通ユーティリティ ----------
+    const pad2 = n => String(n).padStart(2, "0");
+    const fmtDate = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+    function getLocalTodayString() { return fmtDate(new Date()); }
+    function getCurrentTime() {
+        const n = new Date();
+        return `${pad2(n.getHours())}:${pad2(n.getMinutes())}`;
+    }
+    function timeToMinutes(timeStr) {
+        if (!timeStr) return 0;
+        const [h, m] = timeStr.split(":").map(Number);
+        return h * 60 + m;
+    }
+    function escapeHtml(value) {
+        return String(value ?? "")
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#039;");
+    }
+    function cleanUserText(value, maxLength) {
+        return String(value ?? "")
+            .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+            .slice(0, maxLength);
+    }
+    function normalizeStaffName(name) {
+        return String(name || "").trim().replace(/\s+/g, " ");
+    }
+    function compareRecordsByDate(a, b) {
+        const dateCompare = String(a?.date || "").localeCompare(String(b?.date || ""));
+        if (dateCompare !== 0) return dateCompare;
+        return String(a?.staffName || "").localeCompare(String(b?.staffName || ""), "ja");
+    }
+    function dayOfWeek(dateStr) {
+        const d = new Date(String(dateStr) + "T00:00:00");
+        return Number.isNaN(d.getTime()) ? "" : WEEK_DAYS[d.getDay()];
+    }
+    function formatHoursMinutes(totalMinutes) {
+        const min = Math.max(0, Math.round(Number(totalMinutes) || 0));
+        return `${Math.floor(min / 60)}時間${min % 60}分`;
+    }
+    function getHolidaySplitMinutes(totalMinutes) {
+        const total = Math.max(0, Number(totalMinutes) || 0);
+        return { within8Min: Math.min(total, 480), over8Min: Math.max(0, total - 480) };
+    }
+    function formatHistoryTime(date = new Date()) {
+        return date.toLocaleString("ja-JP", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }
+
+    let toastTimer = null;
+    function showToast(msg) {
+        const t = $("toast");
+        t.textContent = msg;
+        t.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => t.classList.remove("show"), 2000);
+    }
+
+    // ---------- 締め期間（16日〜翌月15日） ----------
+    function getPayrollPeriod(dateStr) {
+        const d = new Date(dateStr + "T00:00:00");
+        if (Number.isNaN(d.getTime())) return null;
+        let y = d.getFullYear();
+        let m = d.getMonth();
+        if (d.getDate() <= 15) {
+            m -= 1;
+            if (m < 0) { m = 11; y -= 1; }
+        }
+        return { start: fmtDate(new Date(y, m, 16)), end: fmtDate(new Date(y, m + 1, 15)) };
+    }
+
+    let summaryPeriodAnchor = getLocalTodayString();
+    const currentPeriod = () => getPayrollPeriod(summaryPeriodAnchor || getLocalTodayString());
+
+    function shortPeriodLabel(p) {
+        const [ys, ms, ds] = p.start.split("-").map(Number);
+        const [ye, me, de] = p.end.split("-").map(Number);
+        return ys === ye
+            ? `${ys}/${ms}/${ds} 〜 ${me}/${de}`
+            : `${ys}/${ms}/${ds} 〜 ${ye}/${me}/${de}`;
+    }
+
+    function shiftSummaryPeriod(direction) {
+        const period = currentPeriod();
+        if (!period) return;
+        const d = new Date((direction < 0 ? period.start : period.end) + "T00:00:00");
+        d.setDate(d.getDate() + (direction < 0 ? -1 : 1));
+        summaryPeriodAnchor = fmtDate(d);
+        renderAll();
+    }
+
+    document.querySelectorAll(".js-prev").forEach(b => b.addEventListener("click", () => shiftSummaryPeriod(-1)));
+    document.querySelectorAll(".js-next").forEach(b => b.addEventListener("click", () => shiftSummaryPeriod(1)));
+    document.querySelectorAll(".js-now").forEach(b => b.addEventListener("click", () => {
+        summaryPeriodAnchor = getLocalTodayString();
+        renderAll();
+    }));
+
+    // ---------- 画面切替 ----------
+    function showView(name) {
+        const map = { input: "viewInput", list: "viewList", summary: "viewSummary" };
+        Object.entries(map).forEach(([key, id]) => $(id).classList.toggle("active", key === name));
+        document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === name));
+        window.scrollTo({ top: 0 });
+    }
+    document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => showView(t.dataset.view)));
+
+    // ---------- 勤務ルール ----------
+    function getSelectedShiftRule() {
+        if (!dateInput.value) return null;
+        const d = new Date(dateInput.value + "T00:00:00");
+        if (Number.isNaN(d.getTime())) return null;
+        const dayIdx = d.getDay();
+        const workType = workTypeSelect.value;
+
+        if (workType === "half") {
+            const key = halfShiftSelect.value || "am0900";
+            const base = HALF_SHIFTS[key];
+            let end = base.end;
+            let overtimeStart = base.end;
+            let note = "";
+
+            // 土曜：14:50開始の半日は18:30終了
+            if (dayIdx === 6 && key === "pm1450") {
+                end = "18:30";
+                overtimeStart = "18:30";
+                note = "土曜特例：18:30終了";
+            }
+            // 月曜・金曜：14:30〜18:30勤務は17:50から残業申請可
+            if ((dayIdx === 1 || dayIdx === 5) && key === "pm1430") {
+                overtimeStart = "17:50";
+                note = "月・金特例：17:50から残業申請可";
+            }
+            return { start: base.start, end, overtimeStart, label: `${base.start}〜${end}`, note };
+        }
+
+        const shiftObj = SHIFT_PATTERNS[patternSelect.value][dayIdx];
+        if (!shiftObj) return null;
+        const lunchStart = shiftObj.start === "09:20" ? "13:20" : "13:00";
+        const lunchEnd = shiftObj.start === "09:20" ? "14:50" : "14:30";
+        return {
+            start: shiftObj.start,
+            end: shiftObj.end,
+            overtimeStart: shiftObj.end,
+            lunchStart,
+            lunchEnd,
+            label: shiftObj.str,
+            note: ""
+        };
+    }
+
+    function handleWorkTypeChange() {
+        const isPartTime = workTypeSelect.value === "parttime";
+        const isHalf = workTypeSelect.value === "half";
+
+        // 半日勤務は休憩0分固定
+        if (isHalf) {
+            breakInput.value = "0";
+            breakInput.disabled = true;
+        } else {
+            breakInput.disabled = false;
+            if (!editingIdInput.value && Number(breakInput.value) === 0) breakInput.value = 90;
+        }
+
+        patternGroup.classList.toggle("hidden", isPartTime || isHalf);
+        halfDayGroup.classList.toggle("hidden", !isHalf);
+        partTimeBaseGroup.classList.toggle("hidden", !isPartTime);
+        partTimeMemoGroup.classList.toggle("hidden", !isPartTime);
+        fullTimeSlotsGroup.classList.toggle("hidden", isPartTime);
+        updateShiftPreview();
+    }
+
+    function updateShiftPreview() {
+        if (!dateInput.value) {
+            shiftPreview.textContent = "日付を選択してください";
+            validateDiscrepancy();
+            return;
+        }
+        const dayStr = dayOfWeek(dateInput.value);
+        if (workTypeSelect.value === "parttime") {
+            shiftPreview.textContent = `${dayStr}曜 パート所定: ${ptBaseStart.value || "09:00"}〜${ptBaseEnd.value || "18:30"}`;
+        } else {
+            const rule = getSelectedShiftRule();
+            if (!rule) {
+                shiftPreview.textContent = "定時: -";
+            } else if (workTypeSelect.value === "half") {
+                shiftPreview.textContent = `${dayStr}曜 半日: ${rule.label}${rule.note ? ` / ${rule.note}` : ""}`;
+            } else {
+                shiftPreview.textContent = `${dayStr}曜 定時: ${rule.label}`;
+            }
+        }
+        validateDiscrepancy();
+    }
+
+    // ---------- 残業枠 ----------
+    const slotBox = i => document.querySelector(`.slot[data-slot="${i}"]`);
+
+    function setVisibleSlots(n) {
+        visibleSlots = Math.min(4, Math.max(1, n));
+        for (let i = 1; i <= 4; i++) slotBox(i).classList.toggle("hidden", i > visibleSlots);
+        btnAddSlot.classList.toggle("hidden", visibleSlots >= 4);
+    }
+
+    function clearSlot(i) {
+        $(`s${i}Start`).value = "";
+        $(`s${i}End`).value = "";
+        $(`s${i}Memo`).value = "";
+    }
+
+    btnAddSlot.addEventListener("click", () => {
+        setVisibleSlots(visibleSlots + 1);
+        $(`s${visibleSlots}Start`).focus();
+    });
+
+    document.querySelectorAll("[data-clear]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const i = Number(btn.dataset.clear);
+            clearSlot(i);
+            if (i === visibleSlots && i > 1) setVisibleSlots(i - 1);
+            validateDiscrepancy();
+        });
+    });
+
+    function getSlotTotalMinutes() {
+        if (workTypeSelect.value === "parttime") return 0;
+        let total = 0;
+        for (let i = 1; i <= 4; i++) {
+            const start = $(`s${i}Start`).value;
+            const end = $(`s${i}End`).value;
+            if (start && end) {
+                const s = timeToMinutes(start);
+                let e = timeToMinutes(end);
+                if (e <= s) e += 24 * 60;
+                total += e - s;
+            }
+        }
+        return total;
+    }
+
+    function hasIncompleteSlot() {
+        if (workTypeSelect.value === "parttime") return false;
+        for (let i = 1; i <= 4; i++) {
+            const s = $(`s${i}Start`).value;
+            const e = $(`s${i}End`).value;
+            if ((s && !e) || (!s && e)) return i;
+        }
+        return false;
+    }
+
+    function checkSlotsInsideOvertimeWindow() {
+        if (workTypeSelect.value === "parttime" || workTypeSelect.value === "holiday") return false;
+        const rule = getSelectedShiftRule();
+        if (!rule || !rule.start || !rule.end) return false;
+
+        const shiftStartMin = timeToMinutes(rule.start);
+        const overtimeStartMin = timeToMinutes(rule.overtimeStart || rule.end);
+        const hasLunchWindow = workTypeSelect.value === "normal" && rule.lunchStart && rule.lunchEnd;
+        const lunchStartMin = hasLunchWindow ? timeToMinutes(rule.lunchStart) : null;
+        const lunchEndMin = hasLunchWindow ? timeToMinutes(rule.lunchEnd) : null;
+
+        for (let i = 1; i <= 4; i++) {
+            const start = $(`s${i}Start`).value;
+            const end = $(`s${i}End`).value;
+            if (!start || !end) continue;
+            const s = timeToMinutes(start);
+            let e = timeToMinutes(end);
+            if (e <= s) e += 24 * 60;
+
+            const isBeforeShift = e <= shiftStartMin;
+            const isAfterShift = s >= overtimeStartMin;
+            const isLunchOvertime = hasLunchWindow && s >= lunchStartMin && e <= lunchEndMin;
+            if (!isBeforeShift && !isLunchOvertime && !isAfterShift) return true;
+        }
+        return false;
+    }
+
+    function calculateSlotMinutes(startStr, endStr) {
+        if (!startStr || !endStr) return { normalMin: 0, nightMin: 0 };
+        const start = timeToMinutes(startStr);
+        let end = timeToMinutes(endStr);
+        if (end <= start) end += 24 * 60;
+        let normalMin = 0;
+        let nightMin = 0;
+        for (let m = start; m < end; m++) {
+            const h = Math.floor((m % (24 * 60)) / 60);
+            if (h >= 22 || h < 5) nightMin++;
+            else normalMin++;
+        }
+        return { normalMin, nightMin };
+    }
+
+    function validateDiscrepancy() {
+        if (workTypeSelect.value === "half" && breakInput.value !== "0") breakInput.value = "0";
+
+        if (workTypeSelect.value === "parttime") {
+            const breakMin = Number(breakInput.value) || 0;
+            const ptOverMin = Number(partTimeOverMinInput.value) || 0;
+            const baseStartMin = timeToMinutes(ptBaseStart.value || "09:00");
+            let baseEndMin = timeToMinutes(ptBaseEnd.value || "18:30");
+            if (baseEndMin <= baseStartMin) baseEndMin += 24 * 60;
+            const baseWorkMin = Math.max(0, (baseEndMin - baseStartMin) - breakMin);
+            const totalMin = baseWorkMin + ptOverMin;
+
+            ptOvertimeDisplay.textContent = `加算残業: ${ptOverMin}分`;
+            if (ptOverMin > 0) {
+                discrepancyAlert.className = "alert ok";
+                discrepancyAlert.innerHTML = `✅ 所定 ${formatHoursMinutes(baseWorkMin)} ＋ 申請残業 ${formatHoursMinutes(ptOverMin)} ＝ <b>合計 ${formatHoursMinutes(totalMin)}</b>`;
+            } else {
+                discrepancyAlert.className = "alert hidden";
+            }
+            return true;
+        }
+
+        const slotTotalMin = getSlotTotalMinutes();
+        slotTotalCalc.textContent = `合計 ${formatHoursMinutes(slotTotalMin)}`;
+
+        if (slotTotalMin === 0) {
+            discrepancyAlert.className = "alert hidden";
+            return true;
+        }
+
+        if (checkSlotsInsideOvertimeWindow()) {
+            const rule = getSelectedShiftRule();
+            const lunchText = (workTypeSelect.value === "normal" && rule.lunchStart && rule.lunchEnd)
+                ? `、昼休み ${rule.lunchStart}〜${rule.lunchEnd}` : "";
+            discrepancyAlert.className = "alert ng";
+            discrepancyAlert.innerHTML = `🚨 <b>残業申請枠が所定勤務時間内に入っています。</b><br>残業申請は ${escapeHtml(rule.start)} より前${lunchText}、または ${escapeHtml(rule.overtimeStart || rule.end)} 以降で入力してください。`;
+            return false;
+        }
+
+        discrepancyAlert.className = "alert ok";
+        discrepancyAlert.innerHTML = `✅ <b>残業申請OK:</b> 適切な申請枠です。`;
+        return true;
+    }
+
+    workTypeSelect.addEventListener("change", handleWorkTypeChange);
+    dateInput.addEventListener("change", updateShiftPreview);
+    patternSelect.addEventListener("change", updateShiftPreview);
+    halfShiftSelect.addEventListener("change", updateShiftPreview);
+    ptBaseStart.addEventListener("input", updateShiftPreview);
+    ptBaseEnd.addEventListener("input", updateShiftPreview);
+    [breakInput, partTimeOverMinInput].forEach(el => el.addEventListener("input", validateDiscrepancy));
+    document.querySelectorAll(".slot-input").forEach(el => {
+        el.addEventListener("input", validateDiscrepancy);
+        el.addEventListener("change", validateDiscrepancy);
+    });
+
+    // ---------- 履歴 ----------
+    function slotsSummary(slots) {
+        return (slots || []).map(s => `${s.start}〜${s.end}${s.memo ? `(${s.memo})` : ""}`).join(" / ") || "なし";
+    }
+
+    function buildChangeList(before, after) {
+        const changes = [];
+        const add = (label, a, b) => { if (String(a ?? "") !== String(b ?? "")) changes.push(`${label}: ${a ?? ""} → ${b ?? ""}`); };
+        add("スタッフ名", before.staffName, after.staffName);
+        add("日付", before.date, after.date);
+        add("勤務区分", before.workType, after.workType);
+        add("勤務体系", before.pattern, after.pattern);
+        add("半日勤務", before.halfShift, after.halfShift);
+        add("出勤打刻", before.clockIn, after.clockIn);
+        add("退勤打刻", before.clockOut, after.clockOut);
+        add("休憩時間", before.breakMinutes, after.breakMinutes);
+        add("残業申請", slotsSummary(before.slots), slotsSummary(after.slots));
+        add("パート残業(分)", before.partTimeOverMin || 0, after.partTimeOverMin || 0);
+        add("パート残業理由", before.partTimeMemo || "", after.partTimeMemo || "");
+        return changes;
+    }
+
+    function showHistory(id) {
+        const record = overtimeRecords.find(r => r.id === id);
+        if (!record) return;
+        const history = record.history || [];
+        $("historySub").textContent = `${record.staffName} / ${record.date}`;
+        $("historyBody").innerHTML = history.length === 0
+            ? `<div class="empty" style="padding:20px 0">修正履歴はありません</div>`
+            : history.map((h, i) => `
+                <div class="hist-item">
+                    <div class="when">【${i + 1}】${escapeHtml(h.at)}<span class="mode">${escapeHtml(h.mode)}</span></div>
+                    <ul>${(h.changes || []).map(c => `<li>${escapeHtml(c)}</li>`).join("")}</ul>
+                </div>`).join("");
+        $("historySheet").classList.remove("hidden");
+    }
+    $("btnCloseHistory").addEventListener("click", () => $("historySheet").classList.add("hidden"));
+    $("historySheet").addEventListener("click", e => {
+        if (e.target === $("historySheet")) $("historySheet").classList.add("hidden");
+    });
+
+    // ---------- 登録 ----------
+    form.addEventListener("submit", e => {
+        e.preventDefault();
+
+        const staffName = cleanUserText(staffNameInput.value.trim(), 50);
+        const dateVal = dateInput.value;
+        const workType = workTypeSelect.value;
+
+        if (!staffName) { alert("スタッフ名を入力してください。"); staffNameInput.focus(); return; }
+        if (!dateVal) { alert("日付を入力してください。"); dateInput.focus(); return; }
+
+        const incomplete = hasIncompleteSlot();
+        if (incomplete) {
+            alert(`残業枠${incomplete}の開始・終了時刻の両方を入力してください。`);
+            return;
+        }
+
+        const breakMinutes = workType === "half" ? 0 : (Number(breakInput.value) || 0);
+        const isMatch = validateDiscrepancy();
+        if (!isMatch && workType !== "parttime") {
+            if (!confirm("不整合があります。このまま登録しますか？")) return;
+        }
+
+        const editingId = editingIdInput.value;
+        const existingRecord = editingId ? overtimeRecords.find(r => r.id === Number(editingId)) : null;
+
+        const sameDayIndex = editingId ? -1 : overtimeRecords.findIndex(r =>
+            normalizeStaffName(r.staffName) === normalizeStaffName(staffName) && r.date === dateVal);
+        if (sameDayIndex !== -1) {
+            if (!confirm(`${staffName}さんの ${dateVal} のデータは既に登録されています。\n上書きしますか？（変更内容は履歴に残ります）`)) return;
+        }
+
+        const slots = [];
+        let totalNormalMin = 0;
+        let totalNightMin = 0;
+        let partTimeBaseMin = 0;
+        let partTimeOverMin = 0;
+
+        if (workType === "parttime") {
+            const baseStartMin = timeToMinutes(ptBaseStart.value || "09:00");
+            let baseEndMin = timeToMinutes(ptBaseEnd.value || "18:30");
+            if (baseEndMin <= baseStartMin) baseEndMin += 24 * 60;
+            partTimeBaseMin = Math.max(0, (baseEndMin - baseStartMin) - breakMinutes);
+            partTimeOverMin = Number(partTimeOverMinInput.value) || 0;
+        } else {
+            for (let i = 1; i <= 4; i++) {
+                const start = $(`s${i}Start`).value;
+                const end = $(`s${i}End`).value;
+                const memo = cleanUserText($(`s${i}Memo`).value.trim(), 200);
+                if (start && end) {
+                    const { normalMin, nightMin } = calculateSlotMinutes(start, end);
+                    slots.push({ start, end, memo, normalMin, nightMin });
+                    totalNormalMin += normalMin;
+                    totalNightMin += nightMin;
+                }
+            }
+        }
+
+        const baseRecord = existingRecord || (sameDayIndex !== -1 ? overtimeRecords[sameDayIndex] : null);
+        const recordData = {
+            id: baseRecord ? baseRecord.id : Date.now(),
+            staffName,
+            date: dateVal,
+            workType,
+            pattern: patternSelect.value,
+            halfShift: halfShiftSelect.value,
+            // 打刻UIは廃止済み。既存データに打刻が残っていればそのまま保持する。
+            clockIn: baseRecord ? (baseRecord.clockIn || "") : "",
+            clockOut: baseRecord ? (baseRecord.clockOut || "") : "",
+            breakMinutes,
+            isMatch,
+            slots,
+            totalNormalMin,
+            totalNightMin,
+            holidayOver8Min: workType === "holiday"
+                ? getHolidaySplitMinutes(totalNormalMin + totalNightMin).over8Min : 0,
+            partTimeBaseMin,
+            partTimeOverMin,
+            partTimeMemo: cleanUserText(partTimeMemoInput.value.trim(), 300),
+            ptStart: ptBaseStart.value,
+            ptEnd: ptBaseEnd.value,
+            history: baseRecord ? [...(baseRecord.history || [])] : [],
+            amount: 0
+        };
+
+        if (baseRecord) {
+            const changes = buildChangeList(baseRecord, recordData);
+            if (changes.length > 0) {
+                recordData.history.push({
+                    at: formatHistoryTime(),
+                    mode: editingId ? "通常編集（残業等）" : "同一スタッフ・同日データ上書き",
+                    changes
+                });
+            }
+            const index = overtimeRecords.findIndex(r => r.id === baseRecord.id);
+            if (index !== -1) overtimeRecords[index] = recordData;
+        } else {
+            overtimeRecords.unshift(recordData);
+        }
+
+        const wasEdit = Boolean(editingId);
+        saveAndRender();
+        resetForm();
+        showToast(wasEdit ? "変更を保存しました" : (sameDayIndex !== -1 ? "上書き登録しました" : "登録しました"));
+        if (wasEdit) showView("list");
+    });
+
+    // ---------- 修正・削除 ----------
+    function editRecord(id) {
+        const record = overtimeRecords.find(r => r.id === id);
+        if (!record) return;
+
+        editingIdInput.value = record.id;
+        staffNameInput.value = record.staffName;
+        dateInput.value = record.date;
+        workTypeSelect.value = record.workType;
+        patternSelect.value = record.pattern || "pattern1";
+        halfShiftSelect.value = record.halfShift || "am0900";
+        breakInput.value = record.breakMinutes !== undefined ? record.breakMinutes : 90;
+
+        partTimeOverMinInput.value = record.partTimeOverMin || 0;
+        partTimeMemoInput.value = record.partTimeMemo || "";
+        if (record.ptStart) ptBaseStart.value = record.ptStart;
+        if (record.ptEnd) ptBaseEnd.value = record.ptEnd;
+
+        const slots = Array.isArray(record.slots) ? record.slots : [];
+        for (let i = 1; i <= 4; i++) {
+            const slot = slots[i - 1];
+            $(`s${i}Start`).value = slot ? slot.start : "";
+            $(`s${i}End`).value = slot ? slot.end : "";
+            $(`s${i}Memo`).value = slot ? (slot.memo || "") : "";
+        }
+        setVisibleSlots(Math.max(1, slots.length));
+
+        handleWorkTypeChange();
+
+        formTitle.textContent = "✏️ 勤怠・残業データの修正";
+        btnSubmit.textContent = "変更を保存する";
+        btnSubmit.className = "btn btn-amber";
+        btnCancelEdit.classList.remove("hidden");
+        editBar.classList.remove("hidden");
+        showView("input");
+    }
+
+    function resetForm() {
+        editingIdInput.value = "";
+        formTitle.textContent = "📝 勤怠・残業申請の入力";
+        btnSubmit.textContent = "勤怠・残業データを登録する";
+        btnSubmit.className = "btn btn-primary";
+        btnCancelEdit.classList.add("hidden");
+        editBar.classList.add("hidden");
+
+        // スタッフ名と勤務区分は連続入力しやすいよう残す
+        dateInput.value = getLocalTodayString();
+        breakInput.value = workTypeSelect.value === "half" ? 0 : 90;
+        partTimeOverMinInput.value = 0;
+        partTimeMemoInput.value = "";
+        for (let i = 1; i <= 4; i++) clearSlot(i);
+        setVisibleSlots(1);
+        handleWorkTypeChange();
+    }
+
+    btnCancelEdit.addEventListener("click", () => {
+        resetForm();
+        showView("list");
+    });
+
+    function deleteRecord(id) {
+        const record = overtimeRecords.find(r => r.id === id);
+        if (!record) return;
+        if (!confirm(`${record.staffName}さんの ${record.date} のデータを削除しますか？`)) return;
+        if (Number(editingIdInput.value) === id) resetForm();
+        overtimeRecords = overtimeRecords.filter(r => r.id !== id);
+        saveAndRender();
+        showToast("削除しました");
+    }
+
+    recordList.addEventListener("click", e => {
+        const btn = e.target.closest("button[data-act]");
+        if (!btn) return;
+        const id = Number(btn.dataset.id);
+        if (btn.dataset.act === "edit") editRecord(id);
+        else if (btn.dataset.act === "history") showHistory(id);
+        else if (btn.dataset.act === "delete") deleteRecord(id);
+    });
+
+    // ---------- 一覧・集計表示 ----------
+    function saveAndRender() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(overtimeRecords));
+        } catch (e) {
+            console.warn("Storage save failed:", e);
+            alert("保存に失敗しました。プライベートブラウズ等ではデータを保存できない場合があります。");
+        }
+        renderAll();
+    }
+
+    function getFilteredRecords() {
+        const f = filterStaff.value.trim().toLowerCase();
+        return overtimeRecords.filter(r => !f || String(r.staffName || "").toLowerCase().includes(f));
+    }
+
+    function recordCardHtml(r) {
+        const id = Number(r.id);
+        let typeBadge, statusBadge, body, total;
+
+        if (r.workType === "parttime") {
+            const over = Math.round(Number(r.partTimeOverMin || 0));
+            const base = Math.round(Number(r.partTimeBaseMin || 0));
+            typeBadge = `<span class="badge b-part">パート</span>`;
+            statusBadge = over > 0 ? `<span class="badge b-over">残業あり</span>` : `<span class="badge b-ok">所定内</span>`;
+            body = over > 0
+                ? `<div class="ptmemo"><b>残業:</b> ${over}分<br><b>理由:</b> ${escapeHtml(r.partTimeMemo || "なし")}</div>`
+                : `<div class="muted">所定内のみ（残業申請なし）</div>`;
+            total = `<span class="t-green">合計 ${formatHoursMinutes(base + over)}</span><span class="t-sub">所定${base}分＋残業${over}分</span>`;
+        } else {
+            const labels = { normal: ["通常", "b-normal"], half: ["半日", "b-half"], holiday: ["休日出勤", "b-holiday"] };
+            const [lt, lc] = labels[r.workType] || [r.workType, "b-normal"];
+            typeBadge = `<span class="badge ${lc}">${escapeHtml(lt)}</span>`;
+            const slots = Array.isArray(r.slots) ? r.slots : [];
+            statusBadge = slots.length === 0
+                ? `<span class="badge b-gray">通常勤務</span>`
+                : (r.isMatch ? `<span class="badge b-ok">申請OK</span>` : `<span class="badge b-ng">不整合</span>`);
+            body = slots.length > 0
+                ? slots.map((s, i) => `<div class="slotline"><b>枠${i + 1}: ${escapeHtml(s.start)}〜${escapeHtml(s.end)}</b>${s.memo ? ` <span class="memo">(${escapeHtml(s.memo)})</span>` : ""}</div>`).join("")
+                : `<div class="muted">残業なし</div>`;
+            const n = Math.round(Number(r.totalNormalMin || 0));
+            const nt = Math.round(Number(r.totalNightMin || 0));
+            total = `<span class="t-blue">普通 ${formatHoursMinutes(n)}</span>` + (nt > 0 ? `<span class="t-purple">深夜 ${formatHoursMinutes(nt)}</span>` : "");
+        }
+
+        const histCount = (r.history || []).length;
+        return `
+        <article class="rec">
+            <div class="rec-top">
+                <div>
+                    <div class="rec-date">${escapeHtml(r.date)}（${dayOfWeek(r.date)}）</div>
+                    <div class="rec-name">${escapeHtml(r.staffName)}</div>
+                </div>
+                <div class="badges">${typeBadge}${statusBadge}</div>
+            </div>
+            <div class="rec-body">${body}</div>
+            <div class="rec-total">${total}</div>
+            <div class="rec-actions">
+                <button type="button" class="act edit" data-act="edit" data-id="${id}">修正</button>
+                <button type="button" class="act" data-act="history" data-id="${id}">履歴${histCount ? `（${histCount}）` : ""}</button>
+                <button type="button" class="act del" data-act="delete" data-id="${id}">削除</button>
+            </div>
+        </article>`;
+    }
+
+    function renderList() {
+        const period = currentPeriod();
+        let recs = getFilteredRecords();
+        if (listScope === "period" && period) {
+            recs = recs.filter(r => r.date >= period.start && r.date <= period.end);
+        }
+        recs.sort(compareRecordsByDate);
+        $("listCount").textContent = `${recs.length}件`;
+        recordList.innerHTML = recs.length
+            ? recs.map(recordCardHtml).join("")
+            : `<div class="empty">該当するデータがありません</div>`;
+    }
+
+    function computePeriodTotals(records, period) {
+        const t = { normal: 0, half: 0, holiday: 0, night: 0, holidayOver8: 0, part: 0 };
+        records.forEach(r => {
+            if (!r || !r.date || r.date < period.start || r.date > period.end) return;
+            const normal = Number(r.totalNormalMin || 0);
+            const night = Number(r.totalNightMin || 0);
+            if (r.workType === "normal") {
+                t.normal += normal; t.night += night;
+            } else if (r.workType === "half") {
+                t.half += normal; t.night += night;
+            } else if (r.workType === "holiday") {
+                const split = getHolidaySplitMinutes(normal + night);
+                t.holiday += split.within8Min;
+                t.holidayOver8 += split.over8Min;
+                t.night += night;
+            } else if (r.workType === "parttime") {
+                t.part += Math.round(Number(r.partTimeBaseMin || 0) + Number(r.partTimeOverMin || 0));
+            }
+        });
+        return t;
+    }
+
+    function renderSummary() {
+        const period = currentPeriod();
+        if (!period) return;
+        const t = computePeriodTotals(getFilteredRecords(), period);
+        $("periodNormalOver").textContent = formatHoursMinutes(t.normal);
+        $("periodHalfOver").textContent = formatHoursMinutes(t.half);
+        $("periodHoliday").textContent = formatHoursMinutes(t.holiday);
+        $("periodHolidayOver8").textContent = formatHoursMinutes(t.holidayOver8);
+        $("periodNight").textContent = formatHoursMinutes(t.night);
+        $("periodPartTime").textContent = formatHoursMinutes(t.part);
+
+        const f = filterStaff.value.trim();
+        const fEl = $("summaryFiltered");
+        fEl.classList.toggle("hidden", !f);
+        fEl.textContent = f ? `絞り込み中：「${f}」（一覧タブで解除できます）` : "";
+    }
+
+    function renderPeriodLabels() {
+        const period = currentPeriod();
+        if (!period) return;
+        const isCurrent = getPayrollPeriod(getLocalTodayString())?.start === period.start;
+        document.querySelectorAll(".js-plabel").forEach(el => el.textContent = shortPeriodLabel(period));
+        document.querySelectorAll(".js-pnote").forEach(el => el.textContent = isCurrent ? "" : "今期以外を表示中");
+    }
+
+    function renderStaffDatalist() {
+        const names = [...new Set(overtimeRecords.map(r => normalizeStaffName(r.staffName)).filter(Boolean))]
+            .sort((a, b) => a.localeCompare(b, "ja"));
+        $("staffList").innerHTML = names.map(n => `<option value="${escapeHtml(n)}"></option>`).join("");
+    }
+
+    function renderAll() {
+        renderPeriodLabels();
+        renderList();
+        renderSummary();
+        renderStaffDatalist();
+    }
+
+    filterStaff.addEventListener("input", renderAll);
+    $("listScope").addEventListener("click", e => {
+        const b = e.target.closest("button[data-scope]");
+        if (!b) return;
+        listScope = b.dataset.scope;
+        $("listScope").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+        renderList();
+    });
+
+    // ---------- 一括削除 ----------
+    $("btnDeleteAll").addEventListener("click", () => {
+        if (overtimeRecords.length === 0) {
+            alert("削除できるデータがありません。");
+            return;
+        }
+        if (!confirm(`保存されている残業申請データ ${overtimeRecords.length}件をすべて削除します。\n\nこの操作は元に戻せません。よろしいですか？`)) return;
+        overtimeRecords = [];
+        try { localStorage.removeItem(STORAGE_KEY); } catch (e) { console.warn(e); }
+        resetForm();
+        renderAll();
+        showToast("すべて削除しました");
+    });
+
+    /* ============================================================
+       📊 Excel(.xlsx) 出力ライブラリ（外部ライブラリ不使用・完全オフライン対応）
+       ============================================================ */
+    const XLSX_CRC_TABLE = (() => {
+        const table = new Uint32Array(256);
+        for (let n = 0; n < 256; n++) {
+            let c = n;
+            for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+            table[n] = c >>> 0;
+        }
+        return table;
+    })();
+
+    function xlsxCrc32(bytes) {
+        let crc = 0xFFFFFFFF;
+        for (let i = 0; i < bytes.length; i++) crc = XLSX_CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    function xlsxToUtf8(str) { return new TextEncoder().encode(str); }
+
+    function xlsxDosDateTime(d) {
+        const time = ((d.getHours() & 0x1F) << 11) | ((d.getMinutes() & 0x3F) << 5) | (Math.floor(d.getSeconds() / 2) & 0x1F);
+        const date = (((d.getFullYear() - 1980) & 0x7F) << 9) | (((d.getMonth() + 1) & 0x0F) << 5) | (d.getDate() & 0x1F);
+        return { time: time & 0xFFFF, date: date & 0xFFFF };
+    }
+
+    class XlsxByteWriter {
+        constructor() { this.chunks = []; this.length = 0; }
+        u16(v) { this.chunks.push(Uint8Array.of(v & 0xFF, (v >>> 8) & 0xFF)); this.length += 2; }
+        u32(v) { this.chunks.push(Uint8Array.of(v & 0xFF, (v >>> 8) & 0xFF, (v >>> 16) & 0xFF, (v >>> 24) & 0xFF)); this.length += 4; }
+        bytes(arr) { this.chunks.push(arr); this.length += arr.length; }
+        toUint8Array() {
+            const out = new Uint8Array(this.length);
+            let offset = 0;
+            for (const c of this.chunks) { out.set(c, offset); offset += c.length; }
+            return out;
+        }
+    }
+
+    function xlsxBuildZip(files) {
+        const { time, date } = xlsxDosDateTime(new Date());
+        const localWriter = new XlsxByteWriter();
+        const centralWriter = new XlsxByteWriter();
+
+        for (const file of files) {
+            const nameBytes = xlsxToUtf8(file.name);
+            const data = file.data;
+            const crc = xlsxCrc32(data);
+            const localOffset = localWriter.length;
+
+            localWriter.u32(0x04034b50); localWriter.u16(20); localWriter.u16(0); localWriter.u16(0);
+            localWriter.u16(time); localWriter.u16(date); localWriter.u32(crc);
+            localWriter.u32(data.length); localWriter.u32(data.length);
+            localWriter.u16(nameBytes.length); localWriter.u16(0);
+            localWriter.bytes(nameBytes); localWriter.bytes(data);
+
+            centralWriter.u32(0x02014b50); centralWriter.u16(20); centralWriter.u16(20);
+            centralWriter.u16(0); centralWriter.u16(0); centralWriter.u16(time); centralWriter.u16(date);
+            centralWriter.u32(crc); centralWriter.u32(data.length); centralWriter.u32(data.length);
+            centralWriter.u16(nameBytes.length); centralWriter.u16(0); centralWriter.u16(0);
+            centralWriter.u16(0); centralWriter.u16(0); centralWriter.u32(0); centralWriter.u32(localOffset);
+            centralWriter.bytes(nameBytes);
+        }
+
+        const centralOffset = localWriter.length;
+        const centralSize = centralWriter.length;
+        const eocd = new XlsxByteWriter();
+        eocd.u32(0x06054b50); eocd.u16(0); eocd.u16(0);
+        eocd.u16(files.length); eocd.u16(files.length);
+        eocd.u32(centralSize); eocd.u32(centralOffset); eocd.u16(0);
+
+        const finalWriter = new XlsxByteWriter();
+        finalWriter.bytes(localWriter.toUint8Array());
+        finalWriter.bytes(centralWriter.toUint8Array());
+        finalWriter.bytes(eocd.toUint8Array());
+        return finalWriter.toUint8Array();
+    }
+
+    function xlsxEscapeXml(value) {
+        return String(value ?? "")
+            .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+    }
+
+    function xlsxColName(index) {
+        let n = index + 1;
+        let s = "";
+        while (n > 0) {
+            const rem = (n - 1) % 26;
+            s = String.fromCharCode(65 + rem) + s;
+            n = Math.floor((n - 1) / 26);
+        }
+        return s;
+    }
+
+    function xlsxCellRef(rowNum, colIndex) { return `${xlsxColName(colIndex)}${rowNum}`; }
+
+    function xlsxDisplayWidth(value) {
+        let width = 0;
+        for (const ch of String(value ?? "")) {
+            const cp = ch.codePointAt(0);
+            const isWide = (
+                (cp >= 0x1100 && cp <= 0x115F) || (cp >= 0x2E80 && cp <= 0xA4CF) ||
+                (cp >= 0xAC00 && cp <= 0xD7A3) || (cp >= 0xF900 && cp <= 0xFAFF) ||
+                (cp >= 0xFF00 && cp <= 0xFF60) || (cp >= 0xFFE0 && cp <= 0xFFE6)
+            );
+            width += isWide ? 2 : 1;
+        }
+        return width;
+    }
+
+    function xlsxEstimateWrappedLines(value, colWidth) {
+        const text = String(value ?? "");
+        if (!text) return 1;
+        const usablePerLine = Math.max(4, colWidth - 2);
+        return Math.max(1, Math.ceil(xlsxDisplayWidth(text) / usablePerLine));
+    }
+
+    function xlsxEstimateRowHeight(values, columns, minHeight) {
+        let maxLines = 1;
+        values.forEach((v, i) => {
+            const w = (columns[i] && columns[i].width) || 10;
+            maxLines = Math.max(maxLines, xlsxEstimateWrappedLines(v, w));
+        });
+        return Math.max(minHeight, maxLines * 14 + 6);
+    }
+
+    function xlsxBuildStylesXml() {
+        return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <numFmts count="1"><numFmt numFmtId="176" formatCode="#,##0" /></numFmts>
+  <fonts count="6">
+    <font><sz val="10.5"/><name val="游ゴシック"/><family val="2"/></font>
+    <font><b/><sz val="16"/><color rgb="FF1E293B"/><name val="游ゴシック"/><family val="2"/></font>
+    <font><i/><sz val="9"/><color rgb="FF64748B"/><name val="游ゴシック"/><family val="2"/></font>
+    <font><b/><sz val="10.5"/><color rgb="FFFFFFFF"/><name val="游ゴシック"/><family val="2"/></font>
+    <font><sz val="10.5"/><color rgb="FF334155"/><name val="游ゴシック"/><family val="2"/></font>
+    <font><b/><sz val="10.5"/><color rgb="FF78350F"/><name val="游ゴシック"/><family val="2"/></font>
+  </fonts>
+  <fills count="6">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF1E293B"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF1F5F9"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFDE68A"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFFFBEB"/><bgColor indexed="64"/></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border><left/><right/><top/><bottom/><diagonal/></border>
+    <border>
+      <left style="thin"><color rgb="FFCBD5E1"/></left>
+      <right style="thin"><color rgb="FFCBD5E1"/></right>
+      <top style="thin"><color rgb="FFCBD5E1"/></top>
+      <bottom style="thin"><color rgb="FFCBD5E1"/></bottom>
+      <diagonal/>
+    </border>
+  </borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="13">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="3" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="4" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="4" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="4" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="176" fontId="4" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+    <xf numFmtId="176" fontId="4" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="5" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="5" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="176" fontId="5" fillId="5" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+  </cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+    }
+
+    const XLSX_STYLE = {
+        TITLE: 1, SUBTITLE: 2, HEADER: 3,
+        TEXT: 4, TEXT_ALT: 5, CENTER: 6, CENTER_ALT: 7,
+        NUM: 8, NUM_ALT: 9,
+        SUMMARY_HEADER: 10, SUMMARY_TEXT: 11, SUMMARY_NUM: 12
+    };
+
+    function xlsxRow(rowNum, values, styles, height, numericFlags) {
+        const cells = values.map((v, i) => {
+            const style = styles[i] ?? 0;
+            const ref = xlsxCellRef(rowNum, i);
+            const isNumeric = numericFlags ? numericFlags[i] : false;
+            if (isNumeric && v !== "" && v !== null && v !== undefined && !Number.isNaN(Number(v))) {
+                return `<c r="${ref}" s="${style}"><v>${Number(v)}</v></c>`;
+            }
+            return `<c r="${ref}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${xlsxEscapeXml(v)}</t></is></c>`;
+        }).join("");
+        const heightAttr = height ? ` ht="${height}" customHeight="1"` : "";
+        return `<row r="${rowNum}"${heightAttr}>${cells}</row>`;
+    }
+
+    function xlsxBuildSheetXml(def) {
+        const colCount = def.columns.length;
+        const TITLE_ROW = 1, SUBTITLE_ROW = 2, HEADER_ROW = 4;
+        const dataStartRow = HEADER_ROW + 1;
+        const dataEndRow = dataStartRow + def.rows.length - 1;
+        const rowsXml = [];
+        const merges = [];
+
+        merges.push(`A${TITLE_ROW}:${xlsxColName(colCount - 1)}${TITLE_ROW}`);
+        rowsXml.push(xlsxRow(TITLE_ROW, [def.title], [XLSX_STYLE.TITLE], 24));
+        merges.push(`A${SUBTITLE_ROW}:${xlsxColName(colCount - 1)}${SUBTITLE_ROW}`);
+        rowsXml.push(xlsxRow(SUBTITLE_ROW, [def.subtitle || ""], [XLSX_STYLE.SUBTITLE], 16));
+        rowsXml.push(`<row r="3" ht="6" customHeight="1"></row>`);
+        rowsXml.push(xlsxRow(HEADER_ROW, def.columns.map(c => c.header), def.columns.map(() => XLSX_STYLE.HEADER), 22));
+
+        def.rows.forEach((row, i) => {
+            const rowNum = dataStartRow + i;
+            const alt = i % 2 === 1;
+            const styles = def.columns.map(c => {
+                if (c.numeric) return alt ? XLSX_STYLE.NUM_ALT : XLSX_STYLE.NUM;
+                if (c.align === "center") return alt ? XLSX_STYLE.CENTER_ALT : XLSX_STYLE.CENTER;
+                return alt ? XLSX_STYLE.TEXT_ALT : XLSX_STYLE.TEXT;
+            });
+            rowsXml.push(xlsxRow(rowNum, row, styles, xlsxEstimateRowHeight(row, def.columns, 18), def.columns.map(c => !!c.numeric)));
+        });
+
+        let nextRow = dataEndRow + 1;
+        if (def.rows.length === 0) {
+            merges.push(`A${dataStartRow}:${xlsxColName(colCount - 1)}${dataStartRow}`);
+            rowsXml.push(xlsxRow(dataStartRow, ["対象データがありません"], [XLSX_STYLE.TEXT], 18));
+            nextRow = dataStartRow + 1;
+        }
+
+        if (def.summary) {
+            nextRow += 1;
+            const sColCount = def.summary.columns.length;
+            const summaryFullWidthCol = { width: def.columns.slice(0, Math.max(colCount, sColCount)).reduce((sum, c) => sum + (c ? c.width : 10), 0) };
+            merges.push(`A${nextRow}:${xlsxColName(Math.max(colCount, sColCount) - 1)}${nextRow}`);
+            rowsXml.push(xlsxRow(nextRow, [def.summary.label], [XLSX_STYLE.SUMMARY_HEADER], xlsxEstimateRowHeight([def.summary.label], [summaryFullWidthCol], 20)));
+            nextRow += 1;
+            rowsXml.push(xlsxRow(nextRow, def.summary.columns.map(c => c.header), def.summary.columns.map(() => XLSX_STYLE.SUMMARY_HEADER),
+                xlsxEstimateRowHeight(def.summary.columns.map(c => c.header), def.summary.columns, 20)));
+            nextRow += 1;
+            def.summary.rows.forEach(row => {
+                const styles = def.summary.columns.map(c => c.numeric ? XLSX_STYLE.SUMMARY_NUM : XLSX_STYLE.SUMMARY_TEXT);
+                rowsXml.push(xlsxRow(nextRow, row, styles, xlsxEstimateRowHeight(row, def.summary.columns, 20), def.summary.columns.map(c => !!c.numeric)));
+                nextRow += 1;
+            });
+        }
+
+        const lastRow = nextRow - 1;
+        const colsXml = `<cols>${def.columns.map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${c.width}" customWidth="1"/>`).join("")}</cols>`;
+        const dimensionRef = `A1:${xlsxColName(colCount - 1)}${lastRow}`;
+        const autoFilterRef = def.rows.length > 0 ? `A${HEADER_ROW}:${xlsxColName(colCount - 1)}${HEADER_ROW}` : null;
+
+        return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>
+  <dimension ref="${dimensionRef}"/>
+  <sheetViews>
+    <sheetView showGridLines="0" workbookViewId="0">
+      <pane ySplit="${HEADER_ROW}" topLeftCell="A${dataStartRow}" activePane="bottomLeft" state="frozen"/>
+    </sheetView>
+  </sheetViews>
+  <sheetFormatPr defaultRowHeight="16"/>
+  ${colsXml}
+  <sheetData>
+    ${rowsXml.join("\n    ")}
+  </sheetData>
+  ${autoFilterRef ? `<autoFilter ref="${autoFilterRef}"/>` : ""}
+  ${merges.length ? `<mergeCells count="${merges.length}">${merges.map(m => `<mergeCell ref="${m}"/>`).join("")}</mergeCells>` : ""}
+  <printOptions horizontalCentered="1"/>
+  <pageMargins left="0.3" right="0.3" top="0.5" bottom="0.4" header="0.2" footer="0.2"/>
+  <pageSetup paperSize="9" scale="100" fitToWidth="1" fitToHeight="0" orientation="landscape" horizontalDpi="300" verticalDpi="300"/>
+  <headerFooter differentFirst="0" differentOddEven="0">
+    <oddFooter>&amp;C&amp;P / &amp;N ページ</oddFooter>
+  </headerFooter>
+</worksheet>`;
+    }
+
+    function xlsxContentTypesXml(sheetCount) {
+        const overrides = [];
+        for (let i = 1; i <= sheetCount; i++) {
+            overrides.push(`<Override PartName="/xl/worksheets/sheet${i}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`);
+        }
+        return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  ${overrides.join("\n  ")}
+</Types>`;
+    }
+
+    function xlsxRootRelsXml() {
+        return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`;
+    }
+
+    function xlsxWorkbookXml(sheets) {
+        const sheetEls = sheets.map((s, i) => `<sheet name="${xlsxEscapeXml(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("");
+        const definedNames = sheets.map((s, i) =>
+            `<definedName name="_xlnm.Print_Titles" localSheetId="${i}">'${xlsxEscapeXml(s.name)}'!$1:$4</definedName>`).join("");
+        return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <fileVersion appName="xl"/>
+  <workbookPr/>
+  <sheets>${sheetEls}</sheets>
+  <definedNames>${definedNames}</definedNames>
+</workbook>`;
+    }
+
+    function xlsxWorkbookRelsXml(sheets) {
+        const rels = sheets.map((s, i) =>
+            `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("");
+        return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  ${rels}
+  <Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`;
+    }
+
+    function xlsxBuildWorkbook(sheets) {
+        const files = [
+            { name: "[Content_Types].xml", data: xlsxToUtf8(xlsxContentTypesXml(sheets.length)) },
+            { name: "_rels/.rels", data: xlsxToUtf8(xlsxRootRelsXml()) },
+            { name: "xl/workbook.xml", data: xlsxToUtf8(xlsxWorkbookXml(sheets)) },
+            { name: "xl/_rels/workbook.xml.rels", data: xlsxToUtf8(xlsxWorkbookRelsXml(sheets)) },
+            { name: "xl/styles.xml", data: xlsxToUtf8(xlsxBuildStylesXml()) }
+        ];
+        sheets.forEach((sheet, i) => files.push({ name: `xl/worksheets/sheet${i + 1}.xml`, data: xlsxToUtf8(xlsxBuildSheetXml(sheet.def)) }));
+        return xlsxBuildZip(files);
+    }
+
+    $("btnExportXlsx").addEventListener("click", () => {
+        if (overtimeRecords.length === 0) {
+            alert("出力できるデータがありません。");
+            return;
+        }
+        const filterTextRaw = filterStaff.value.trim();
+        const exportRecords = getFilteredRecords();
+        if (exportRecords.length === 0) {
+            alert("現在のスタッフ絞り込み条件に該当するデータがありません。");
+            return;
+        }
+
+        const employeeRecords = exportRecords.filter(r => r.workType !== "parttime").sort(compareRecordsByDate);
+        const partTimeRecords = exportRecords.filter(r => r.workType === "parttime").sort(compareRecordsByDate);
+        const period = currentPeriod();
+        const outputTimestamp = `${getLocalTodayString()} ${getCurrentTime()}`;
+        const filterSuffix = filterTextRaw ? ` / 絞り込み: "${filterTextRaw}"` : "";
+        const sheets = [];
+
+        // 正社員シート
+        if (employeeRecords.length > 0) {
+            const rows = employeeRecords.map(r => {
+                let normal = 0, half = 0, holiday = 0, night = 0, holidayOver8 = 0;
+                const rowNormal = Number(r.totalNormalMin || 0);
+                const rowNight = Number(r.totalNightMin || 0);
+                if (r.workType === "normal") { normal = rowNormal; night = rowNight; }
+                else if (r.workType === "half") { half = rowNormal; night = rowNight; }
+                else if (r.workType === "holiday") {
+                    const split = getHolidaySplitMinutes(rowNormal + rowNight);
+                    holiday = split.within8Min; holidayOver8 = split.over8Min; night = rowNight;
+                }
+                const row = [
+                    r.staffName || "", r.date || "",
+                    formatHoursMinutes(normal), formatHoursMinutes(night), formatHoursMinutes(half),
+                    formatHoursMinutes(holiday), formatHoursMinutes(holidayOver8)
+                ];
+                for (let i = 0; i < 4; i++) {
+                    const s = r.slots && r.slots[i];
+                    row.push(s ? `${s.start}〜${s.end} (${s.memo || ""})` : "");
+                }
+                return row;
+            });
+
+            let summary = null;
+            if (period) {
+                const t = computePeriodTotals(employeeRecords, period);
+                summary = {
+                    label: `月間集計期間: ${period.start}〜${period.end}`,
+                    columns: [
+                        { header: "通常残業", width: 12 }, { header: "深夜残業", width: 12 },
+                        { header: "半日出勤", width: 12 }, { header: "休日8h内", width: 12 }, { header: "休出8h外", width: 12 }
+                    ],
+                    rows: [[
+                        formatHoursMinutes(t.normal), formatHoursMinutes(t.night), formatHoursMinutes(t.half),
+                        formatHoursMinutes(t.holiday), formatHoursMinutes(t.holidayOver8)
+                    ]]
+                };
+            }
+
+            const SLOT_COL_START = 7;
+            const slotWidths = [0, 1, 2, 3].map(i =>
+                rows.some(r => String(r[SLOT_COL_START + i] || "").trim() !== "") ? 26 : 6);
+
+            sheets.push({
+                name: "正社員",
+                def: {
+                    title: "正社員・残業データ",
+                    subtitle: `出力日時: ${outputTimestamp} / 対象件数: ${employeeRecords.length}件${filterSuffix}`,
+                    columns: [
+                        { header: "スタッフ名", width: 14 },
+                        { header: "日付", width: 12, align: "center" },
+                        { header: "通常残業", width: 11, align: "center" },
+                        { header: "深夜残業", width: 11, align: "center" },
+                        { header: "半日出勤", width: 11, align: "center" },
+                        { header: "休日8h内", width: 11, align: "center" },
+                        { header: "休出8h外", width: 11, align: "center" },
+                        { header: "枠1", width: slotWidths[0] },
+                        { header: "枠2", width: slotWidths[1] },
+                        { header: "枠3", width: slotWidths[2] },
+                        { header: "枠4", width: slotWidths[3] }
+                    ],
+                    rows,
+                    summary
+                }
+            });
+        }
+
+        // パートシート
+        if (partTimeRecords.length > 0) {
+            const rows = partTimeRecords.map(r => {
+                const baseMin = Math.round(Number(r.partTimeBaseMin || 0));
+                const overMin = Math.round(Number(r.partTimeOverMin || 0));
+                return [r.staffName || "", r.date || "", baseMin, overMin, baseMin + overMin, r.partTimeMemo || ""];
+            });
+            let summary = null;
+            if (period) {
+                summary = {
+                    label: `月間集計期間: ${period.start}〜${period.end}`,
+                    columns: [{ header: "パート合計労働時間(分)", width: 26, numeric: true }],
+                    rows: [[computePeriodTotals(partTimeRecords, period).part]]
+                };
+            }
+            sheets.push({
+                name: "パート",
+                def: {
+                    title: "パート勤務データ",
+                    subtitle: `出力日時: ${outputTimestamp} / 対象件数: ${partTimeRecords.length}件${filterSuffix}`,
+                    columns: [
+                        { header: "スタッフ名", width: 14 },
+                        { header: "日付", width: 12, align: "center" },
+                        { header: "所定時間(分)", width: 14, numeric: true },
+                        { header: "残業時間(分)", width: 14, numeric: true },
+                        { header: "合計労働時間(分)", width: 16, numeric: true },
+                        { header: "残業理由", width: 42 }
+                    ],
+                    rows,
+                    summary
+                }
+            });
+        }
+
+        const workbookBytes = xlsxBuildWorkbook(sheets);
+        const blob = new Blob([workbookBytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        const url = URL.createObjectURL(blob);
+
+        let suffix = "";
+        if (filterTextRaw) {
+            const sampleName = exportRecords[0] && exportRecords[0].staffName
+                ? String(exportRecords[0].staffName).replace(/[\\/:*?"<>|]/g, "_") : "絞り込み";
+            suffix = `_${sampleName}`;
+        } else if (partTimeRecords.length > 0 && employeeRecords.length === 0) {
+            suffix = "_パート";
+        } else if (employeeRecords.length > 0 && partTimeRecords.length === 0) {
+            suffix = "_正社員";
+        }
+
+        const a = document.createElement("a");
+        a.href = url;
+        // ファイル名の日付は端末のローカル日付を使用（UTCずれ対策）
+        a.download = `勤怠管理データ${suffix}_${getLocalTodayString()}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        // スマホではダウンロード開始前にURLを破棄すると失敗するため少し待つ
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        showToast("Excelを出力しました");
+    });
+
+    // ---------- 初期化 ----------
+    dateInput.value = getLocalTodayString();
+    setVisibleSlots(1);
+    handleWorkTypeChange();
+    renderAll();
+</script>
+</body>
+</html>
