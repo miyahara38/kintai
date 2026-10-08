@@ -44,6 +44,22 @@ Node.js は、このシステムを動かすための土台となるソフトで
 - ルーターの「**ゲストWi-Fi**」や「**プライバシーセパレーター(端末間通信の禁止)**」が有効だと、スマホがサーバーに届きません。社員のスマホが使うWi-Fiでは、これらを**オフ**にしてください。
 - **ルーターの「ポート開放」(外部公開)の設定は、絶対にしないでください。**
 
+### 1-4. スリープしない設定(重要)
+**サーバーのパソコンがスリープすると、サーバーも止まり、タブレットのQRが出なくなります。** 次の設定をしてください(「2_自動起動の登録」でも自動で設定されます)。
+
+- 電源につないだままにします。
+- ノートパソコンの場合は、**ふたを閉じても止まらない**設定にします。
+  管理者のターミナルで、次の5行を1行ずつ入力します。
+  ```
+  powercfg /change standby-timeout-ac 0
+  powercfg /change standby-timeout-dc 0
+  powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0
+  powercfg /setdcvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0
+  powercfg /setactive SCHEME_CURRENT
+  ```
+- **打刻用タブレット(iPad)側も**:「設定」→「画面表示と明るさ」→「自動ロック」を「なし」に。充電器につないだままにします。
+- スリープから戻ったあとは、サーバーのパソコンの住所が変わることがあります。QRが出ないときは、`ipconfig` で住所を確認し、`.env` の `BASE_URL` と同じか確認してください。
+
 ---
 
 ## 2. システムを入れる

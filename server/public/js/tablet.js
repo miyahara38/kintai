@@ -58,18 +58,33 @@
     clear(view.qrbox).append(svg);
   }
 
+  let fetching = false;
+  let lastTry = 0;
+  let ttlSec = 60;
+  let offline = false;
+
+  function showWaiting() {
+    // 期限切れのQRを出したままにしない(読み取っても使えないため)
+    clear(view.qrbox).append(h('div', { class: 'msg' }, h('div', {}, 'サーバーに接続できません'), h('small', {}, '自動で再接続しています。しばらくお待ちください。')));
+    view.bar.style.transition = 'none'; view.bar.style.width = '0%';
+    qrShown = false;
+  }
+
+  let qrShown = false;
   async function refreshQr() {
+    if (fetching || !view) return;
+    fetching = true; lastTry = Date.now();
     try {
       const r = await api('/api/tablet/qr');
-      currentToken = r.token; rotateSec = r.rotateSec; lastIssued = Date.now();
+      currentToken = r.token; rotateSec = r.rotateSec; ttlSec = r.ttlSec || 60; lastIssued = Date.now(); offline = false; qrShown = true;
       drawQr(r.qr);
       view.bar.style.transition = 'none'; view.bar.style.width = '100%';
       void view.bar.offsetWidth;
       view.bar.style.transition = `width ${rotateSec}s linear`; view.bar.style.width = '0%';
     } catch (e) {
       if (e.data && e.data.unregistered) { stop(); showUnregistered(); }
-      else if (view) view.qrbox.title = e.message;
-    }
+      else { offline = true; if (view && (!lastIssued || Date.now() - lastIssued > ttlSec * 1000) && qrShown) showWaiting(); else if (view && !qrShown) showWaiting(); }
+    } finally { fetching = false; }
   }
 
   const pad = n => String(n).padStart(2, '0');
@@ -81,7 +96,9 @@
     view.clock.textContent = `${pad(j.getUTCHours())}:${pad(j.getUTCMinutes())}:${pad(j.getUTCSeconds())}`;
     const w = ['日', '月', '火', '水', '木', '金', '土'][j.getUTCDay()];
     view.date.textContent = `${j.getUTCFullYear()}年${j.getUTCMonth() + 1}月${j.getUTCDate()}日(${w})`;
-    if (lastIssued && Date.now() - lastIssued >= rotateSec * 1000) refreshQr();
+    const age = lastIssued ? Date.now() - lastIssued : Infinity;
+    if (age >= rotateSec * 1000 && Date.now() - lastTry >= (offline ? 3000 : 0)) refreshQr();
+    if (offline && age > ttlSec * 1000 && qrShown) showWaiting();
   }
 
   async function pollState() {
@@ -90,9 +107,10 @@
       timeOffset = s.nowMs - Date.now();
       clear(view.list).append(...s.recent.map(r => h('li', {},
         h('span', {}, `${r.name}さん`), h('span', { class: r.type }, r.type === 'in' ? '出勤' : '退勤'), h('span', { class: 't' }, r.hhmm))));
-      if (s.tokenUsed) refreshQr(); // 使われたQRはすぐ新しいものに替える
+      if (s.tokenUsed || offline) refreshQr(); // 使われたQR・接続が戻った直後は、すぐ新しいものに替える
     } catch (e) {
       if (e.data && e.data.unregistered) { stop(); showUnregistered(); }
+      else offline = true;
     }
   }
 
@@ -106,10 +124,15 @@
   (async function start() {
     try { await registerIfNeeded(); } catch { return; }
     buildLayout();
+    timers.push(setInterval(tickClock, 500), setInterval(pollState, 2000));
     await refreshQr();
     if (!view) return;
     await pollState();
-    timers.push(setInterval(tickClock, 500), setInterval(pollState, 2000));
     tickClock();
+    // スリープから戻った・ネットワークが戻った時は、すぐに取り直す
+    const wake = () => { if (view) { lastIssued = 0; refreshQr(); pollState(); } };
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
+    window.addEventListener('online', wake);
+    window.addEventListener('pageshow', wake);
   })();
 })();

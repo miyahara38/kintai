@@ -26,9 +26,14 @@ Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue | Remov
 New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol TCP -LocalPort $port -Action Allow `
   -RemoteAddress LocalSubnet -Profile Any | Out-Null
 
-# 3) スリープしない設定(電源につないでいる間)
+# 3) スリープしない設定(電源につないでいる間も、バッテリーの間も。ノートPCはふたを閉じても止まらない)
 powercfg /change standby-timeout-ac 0 | Out-Null
+powercfg /change standby-timeout-dc 0 | Out-Null
 powercfg /change hibernate-timeout-ac 0 | Out-Null
+powercfg /change hibernate-timeout-dc 0 | Out-Null
+powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0 | Out-Null
+powercfg /setdcvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0 | Out-Null
+powercfg /setactive SCHEME_CURRENT | Out-Null
 
 Start-ScheduledTask -TaskName $taskName
 Write-Host ''
