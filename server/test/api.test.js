@@ -12,6 +12,8 @@ Object.assign(process.env, {
   TOKEN_SECRET: 'x'.repeat(40), SESSION_SECRET: 'y'.repeat(40), PORT: '0', BASE_URL: 'http://test.local',
   QR_TTL_SECONDS: '2', PUNCH_COOLDOWN_SECONDS: '1', LOGIN_MAX_FAILS: '3', LOGIN_LOCK_MINUTES: '15',
 });
+const { config } = require('../src/config');
+config.OVERTIME_AUTO_APPROVE = false; // 既定は自動承認。承認フローの試験では手動承認にして確認する
 const db = require('../src/db');
 const C = require('../src/crypto');
 const auth = require('../src/auth');
@@ -195,8 +197,9 @@ test('残業申請: 本人入力→承認待ち→管理者が承認/差し戻�
   assert.strictEqual((await a.post(`/api/admin/overtime/${own.j.request.id}/review`, { status: 'approved' })).s, 403);
 });
 
-test('食い違い警告: 申請終了が退勤より後 / 定時後の打刻で申請なし(1分でも警告)', async () => {
+test('食い違い警告: 申請終了が退勤より後は警告。「定時後の打刻で申請なし」は既定で出ない(設定で復活可)', async () => {
   const att = require('../src/attendance');
+  config.WARN_NO_REQUEST = true; // 設定を有効にした場合の動作
   const emp1 = db.get('SELECT * FROM employees WHERE code=?', 'E1');
   const date = '2026-10-07'; // 水曜 パターン1 = 定時 18:30
   const dayOf = (inT, outT, req) => att.buildDay(emp1, date, [
@@ -212,6 +215,44 @@ test('食い違い警告: 申請終了が退勤より後 / 定時後の打刻で
   assert.ok(dayOf('', '18:00', null).warnings.some(w => w.code === 'MISSING_IN'));
   assert.ok(dayOf('', '', rq([{ start: '19:00', end: '21:00' }])).warnings.some(w => w.code === 'NO_PUNCH'));
   assert.ok(att.buildDay(emp1, '2026-10-11', [{ type: 'in', hhmm: '10:00' }, { type: 'out', hhmm: '12:00' }], null, '2026-10-12').warnings.some(w => w.code === 'HOLIDAY_NO_REQUEST'), '日曜の打刻');
+
+  // 既定(WARN_NO_REQUEST なし): 「申請がない」警告は出ないが、申請が打刻より後・打刻漏れの警告は残る
+  config.WARN_NO_REQUEST = false;
+  assert.ok(!dayOf('09:00', '18:31', null).warnings.some(w => w.code === 'NO_REQUEST'), '定時後の打刻で申請なしの警告は出ない');
+  assert.ok(!dayOf('09:00', '21:01', rq([{ start: '19:00', end: '21:00' }])).warnings.some(w => w.code === 'NO_REQUEST'));
+  assert.ok(dayOf('09:00', '20:59', rq([{ start: '19:00', end: '21:00' }])).warnings.some(w => w.code === 'REQ_AFTER_OUT'), '申請終了が退勤より後は警告');
+  assert.ok(dayOf('19:01', '21:00', rq([{ start: '19:00', end: '21:00' }])).warnings.some(w => w.code === 'REQ_BEFORE_IN'));
+  assert.ok(dayOf('09:00', '', null).warnings.some(w => w.code === 'MISSING_OUT'), '打刻漏れは警告');
+  assert.ok(dayOf('', '18:00', null).warnings.some(w => w.code === 'MISSING_IN'));
+});
+
+test('残業の自動承認: 申請と同時に承認済み・本人が修正でき、履歴が残る。手動承認の設定にも戻せる', async () => {
+  config.OVERTIME_AUTO_APPROVE = true;
+  try {
+    const e = await loggedIn(other);
+    const d = R.addDays(jstDate(Date.now()), -5);
+    const r1 = await e.post('/api/me/overtime', { date: d, workType: 'normal', slots: [{ start: '19:00', end: '20:00' }] });
+    assert.strictEqual(r1.s, 200);
+    assert.strictEqual(r1.j.request.status, 'approved');
+    assert.strictEqual(r1.j.request.reviewComment, '自動承認');
+    // 承認済みでも、本人が自分で直せる
+    const r2 = await e.post('/api/me/overtime', { date: d, workType: 'normal', slots: [{ start: '19:00', end: '20:30' }] });
+    assert.strictEqual(r2.s, 200); assert.strictEqual(r2.j.request.normalMin, 90); assert.strictEqual(r2.j.request.status, 'approved');
+    assert.ok(db.get("SELECT 1 AS x FROM audit_log WHERE action='overtime.update' AND reason LIKE '%自動承認%'"), '変更の履歴が残る');
+    // 管理者は差し戻せる → 本人が直して再提出すると、また自動承認
+    const a = await loggedIn(admin);
+    assert.strictEqual((await a.post(`/api/admin/overtime/${r1.j.request.id}/review`, { status: 'rejected', comment: '時間を確認' })).s, 200);
+    const r3 = await e.post('/api/me/overtime', { date: d, workType: 'normal', slots: [{ start: '19:00', end: '20:00' }] });
+    assert.strictEqual(r3.j.request.status, 'approved');
+    // 自動承認でも、今までどおり日付の範囲・日またぎ・不正入力は拒否
+    assert.strictEqual((await e.post('/api/me/overtime', { date: R.addDays(jstDate(Date.now()), -40), workType: 'normal', slots: [{ start: '19:00', end: '20:00' }] })).s, 400);
+    // 他人の申請は触れない
+    assert.strictEqual((await (await loggedIn(emp)).post(`/api/me/overtime/${r1.j.request.id}/delete`)).s, 404);
+    // 手動承認に戻すと、承認済みは本人が直せない
+    config.OVERTIME_AUTO_APPROVE = false;
+    assert.strictEqual((await e.post('/api/me/overtime', { date: d, workType: 'normal', slots: [{ start: '19:00', end: '20:00' }] })).s, 403);
+    assert.strictEqual((await e.f('/api/me')).j.autoApprove, false);
+  } finally { config.OVERTIME_AUTO_APPROVE = false; }
 });
 
 test('打刻修正: 元の記録は消えず、理由必須・履歴が残る。履歴は改ざん不可', async () => {

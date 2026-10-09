@@ -10,7 +10,8 @@
   let punch = null;        // 今日の打刻状態
   let today = '';
   let tab = token ? 'punch' : 'punch';
-  let anchor = '';         // 勤怠一覧の締め期間の基準日
+  let anchor = '';
+  let autoApprove = false; // 残業申請を自動承認する設定(サーバーの設定)         // 勤怠一覧の締め期間の基準日
 
   const TABS = [['punch', '🕘', '打刻'], ['days', '📋', '勤怠・申請'], ['settings', '⚙️', '設定']];
 
@@ -24,7 +25,7 @@
   async function boot() {
     try {
       const r = await api('/api/me');
-      me = r.user; punch = r.punch; today = r.today || '';
+      me = r.user; punch = r.punch; today = r.today || ''; autoApprove = !!r.autoApprove;
     } catch (e) { me = null; main.append(h('div', { class: 'alert ng' }, e.message)); }
     $('btnLogout').onclick = async () => { await api('/api/logout', { method: 'POST' }); location.href = token ? '/p?t=' + encodeURIComponent(token) : '/me'; };
     $('btnAdmin').onclick = () => { location.href = '/admin'; };
@@ -55,7 +56,7 @@
       try {
         const r = await api('/api/login', { method: 'POST', body: { code: code.value.trim(), password: pw.value } });
         me = r.user;
-        const s = await api('/api/me'); punch = s.punch; today = s.today;
+        const s = await api('/api/me'); punch = s.punch; today = s.today; autoApprove = !!s.autoApprove;
         render();
       } catch (err) { msg.append(h('div', { class: 'alert ng' }, err.message)); btn.disabled = false; }
     } },
@@ -189,7 +190,7 @@
   function drawForm(st) {
     const f = st.f;
     clear(main);
-    const locked = st.status === 'approved';
+    const locked = st.status === 'approved' && !autoApprove;
     const dateIn = h('input', { class: 'input', type: 'date', value: f.date, required: true, disabled: locked });
     dateIn.addEventListener('change', async () => { if (R.isDateStr(dateIn.value)) drawForm(await loadForm(dateIn.value)); });
     const rf = RequestForm.build(me, f, { locked, redraw: () => drawForm(st) });

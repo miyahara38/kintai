@@ -104,9 +104,9 @@ function dayWarnings(emp, date, clockIn, clockOut, req, today) {
     const over = eff ? eff.ptOverMin : 0;
     const expectedOut = T(ptEnd) + over;
     if (outM !== null) {
-      if (outM > expectedOut) add('NO_REQUEST', over > 0
+      if (outM > expectedOut) { if (config.WARN_NO_REQUEST) add('NO_REQUEST', over > 0
         ? `退勤打刻 ${clockOut} が、所定終了+申請残業(${R.minutesToTime(Math.min(expectedOut, 1439))})より後です。`
-        : `所定終了 ${ptEnd} より後(${clockOut})の打刻がありますが、残業申請がありません。`);
+        : `所定終了 ${ptEnd} より後(${clockOut})の打刻がありますが、残業申請がありません。`); }
       else if (over > 0 && outM < expectedOut) add('REQ_AFTER_OUT', `残業申請(${over}分)の終了見込み ${R.minutesToTime(Math.min(expectedOut, 1439))} より、退勤打刻 ${clockOut} が早いです。`);
     }
     if (eff && over > 0 && inM === null && outM === null) add('NO_PUNCH', '残業申請がありますが、この日の打刻がありません。');
@@ -125,7 +125,7 @@ function dayWarnings(emp, date, clockIn, clockOut, req, today) {
   }
   if (outM !== null) {
     const limit = Math.max(schedEnd ?? -1, lastSlotEnd ?? -1);
-    if (limit >= 0 && outM > limit) {
+    if (config.WARN_NO_REQUEST && limit >= 0 && outM > limit) {
       add('NO_REQUEST', slots.length
         ? `退勤打刻 ${clockOut} が、残業申請の終了 ${R.minutesToTime(limit)} より後です(申請のない残業の可能性)。`
         : `定時 ${rule.end} より後(${clockOut})の打刻があるのに、残業申請がありません。`);

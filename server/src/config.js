@@ -38,6 +38,10 @@ const config = {
   BACKUP_DIR: resolvePath(process.env.BACKUP_DIR || './backups'),
   BACKUP_TIME: /^\d{2}:\d{2}$/.test(process.env.BACKUP_TIME || '') ? process.env.BACKUP_TIME : '02:00',
   BACKUP_KEEP_DAYS: num('BACKUP_KEEP_DAYS', 30),
+  // 残業申請を、申請と同時に自動承認する(false にすると、管理者が1件ずつ承認する)
+  OVERTIME_AUTO_APPROVE: String(process.env.OVERTIME_AUTO_APPROVE ?? 'true').toLowerCase() !== 'false',
+  // 「定時後の打刻があるのに残業申請がない」警告を出す(初期値は出さない)
+  WARN_NO_REQUEST: String(process.env.WARN_NO_REQUEST).toLowerCase() === 'true',
   COOKIE_SECURE: String(process.env.COOKIE_SECURE).toLowerCase() === 'true',
   PUBLIC_DIR: path.join(ROOT, 'public'),
   TZ: 'Asia/Tokyo',

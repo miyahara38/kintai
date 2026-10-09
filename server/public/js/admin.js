@@ -104,10 +104,10 @@
       h('button', { class: 'btn ghost', type: 'button', onclick: () => s.close() }, 'キャンセル')));
   }
 
-  function reviewButtons(item, after) {
+  function reviewButtons(item, after, rejectOnly) {
     const r = item.request;
     return h('div', { class: 'btnrow mt' },
-      h('button', { class: 'btn sm green', type: 'button', onclick: async () => {
+      rejectOnly ? null : h('button', { class: 'btn sm green', type: 'button', onclick: async () => {
         try { await api(`/api/admin/overtime/${r.id}/review`, { method: 'POST', body: { status: 'approved' } }); toast('承認しました'); after(); } catch (e) { alert(e.message); }
       } }, '承認'),
       h('button', { class: 'btn sm red', type: 'button', onclick: () => {
@@ -184,12 +184,12 @@
     const sel = h('select', { class: 'input' }, ...[['pending', '承認待ち'], ['approved', '承認済み(新しい順)'], ['rejected', '差し戻し中']].map(([v, l]) => h('option', { value: v, selected: v === pendingStatus }, l)));
     sel.addEventListener('change', () => { pendingStatus = sel.value; render(); });
     box.append(h('div', { class: 'card' }, h('label', { class: 'label' }, '表示する状態'), sel,
-      h('p', { class: 'note' }, '自分自身の申請は承認できません(他の管理者が承認します)。')));
+      h('p', { class: 'note' }, '社員が申請した残業は、自動で承認済みになります(設定で変更できます)。内容に問題がある申請は、「差し戻し」で社員に戻せます。承認済みの内容の修正は、「月別」「日別」から行えます。')));
     if (!d.items.length) box.append(h('div', { class: 'card muted center' }, '該当する申請はありません'));
     for (const it of d.items) {
       const emp = { id: it.employee.id, name: it.employee.name, kind: it.employee.kind };
       box.append(h('div', {}, dayCard(it, { extra: `${it.employee.name}(${it.employee.code})` }),
-        it.request.status !== 'approved' ? reviewButtons(it, render) : null,
+        reviewButtons(it, render, it.request.status === 'approved'),
         h('div', { class: 'mt' })));
     }
   }

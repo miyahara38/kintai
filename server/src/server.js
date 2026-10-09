@@ -30,6 +30,17 @@ app.authHook = auth.authHook;
 require('./routes-user').register(app);
 require('./routes-admin').register(app);
 
+// 自動承認が有効なのに「承認待ち」が残っている場合は、承認済みにする(履歴に記録)
+if (config.OVERTIME_AUTO_APPROVE) {
+  const rows = db.all("SELECT id, employee_id, work_date FROM overtime_requests WHERE status='pending'");
+  for (const r of rows) {
+    db.run("UPDATE overtime_requests SET status='approved', reviewed_at=?, review_comment='自動承認', updated_at=? WHERE id=?", Date.now(), Date.now(), r.id);
+    db.audit({ actor: null, action: 'overtime.approve', entity: 'overtime_request', entityId: r.id, targetEmployeeId: r.employee_id, workDate: r.work_date,
+      before: { 状態: 'pending' }, after: { 状態: 'approved' }, reason: '自動承認の設定に切り替えたため、承認待ちを承認済みにしました' });
+  }
+  if (rows.length) console.log(`承認待ち ${rows.length} 件を自動承認にしました`);
+}
+
 const server = createServer(app);
 server.listen(config.PORT, '0.0.0.0', () => {
   console.log(`勤怠システムを起動しました: http://localhost:${config.PORT}  (QR用アドレス: ${config.BASE_URL || '未設定'})`);

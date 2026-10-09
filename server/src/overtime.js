@@ -7,6 +7,8 @@ const { config } = require('./config');
 const { jstDate } = require('./time');
 const { mapRequest } = require('./attendance');
 
+const AUTO_COMMENT = '自動承認';
+
 const rowToStored = v => ({
   work_date: v.date, work_type: v.workType, pattern: v.pattern, half_shift: v.halfShift, break_min: v.breakMinutes,
   slots: JSON.stringify(v.slots), normal_min: v.normalMin, night_min: v.nightMin,
@@ -57,7 +59,7 @@ function save({ actor, emp, input, asAdmin = false, reason = '' }) {
     }
   }
   const existing = getByEmpDate(emp.id, v.date);
-  if (existing && !asAdmin && existing.status === 'approved') {
+  if (existing && !asAdmin && existing.status === 'approved' && !config.OVERTIME_AUTO_APPROVE) {
     throw new HttpError(403, 'この日の申請はすでに承認されています。修正が必要な場合は管理者に依頼してください。');
   }
   if (asAdmin && existing && !reason) throw new HttpError(400, '修正の理由を入力してください。');
@@ -67,32 +69,35 @@ function save({ actor, emp, input, asAdmin = false, reason = '' }) {
   const result = db.tx(() => {
     let id;
     if (existing) {
-      const status = asAdmin ? existing.status : 'pending';
+      const auto = !asAdmin && config.OVERTIME_AUTO_APPROVE;
+      const status = asAdmin ? existing.status : (auto ? 'approved' : 'pending');
       db.run(
         `UPDATE overtime_requests SET work_type=?,pattern=?,half_shift=?,break_min=?,slots=?,normal_min=?,night_min=?,
            holiday_within8_min=?,holiday_over8_min=?,pt_start=?,pt_end=?,pt_base_min=?,pt_over_min=?,pt_memo=?,is_match=?,
            status=?,reviewer_id=?,reviewed_at=?,review_comment=?,updated_at=? WHERE id=?`,
         s.work_type, s.pattern, s.half_shift, s.break_min, s.slots, s.normal_min, s.night_min, s.holiday_within8_min, s.holiday_over8_min,
         s.pt_start, s.pt_end, s.pt_base_min, s.pt_over_min, s.pt_memo, s.is_match, status,
-        status === 'pending' ? null : existing.reviewerId, status === 'pending' ? null : existing.reviewedAt,
-        status === 'pending' ? '' : existing.reviewComment, now, existing.id);
+        auto ? null : (status === 'pending' ? null : existing.reviewerId), auto ? now : (status === 'pending' ? null : existing.reviewedAt),
+        auto ? AUTO_COMMENT : (status === 'pending' ? '' : existing.reviewComment), now, existing.id);
       id = existing.id;
     } else {
-      const status = asAdmin ? 'approved' : 'pending';
+      const auto = !asAdmin && config.OVERTIME_AUTO_APPROVE;
+      const status = (asAdmin || auto) ? 'approved' : 'pending';
       const r = db.run(
         `INSERT INTO overtime_requests(employee_id,work_date,work_type,pattern,half_shift,break_min,slots,normal_min,night_min,
            holiday_within8_min,holiday_over8_min,pt_start,pt_end,pt_base_min,pt_over_min,pt_memo,is_match,status,reviewer_id,reviewed_at,
            source,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         emp.id, s.work_date, s.work_type, s.pattern, s.half_shift, s.break_min, s.slots, s.normal_min, s.night_min,
         s.holiday_within8_min, s.holiday_over8_min, s.pt_start, s.pt_end, s.pt_base_min, s.pt_over_min, s.pt_memo, s.is_match, status,
-        asAdmin ? actor.id : null, asAdmin ? now : null, asAdmin ? 'admin' : 'app', now, now);
+        asAdmin ? actor.id : null, (asAdmin || auto) ? now : null, asAdmin ? 'admin' : 'app', now, now);
+      if (auto) db.run('UPDATE overtime_requests SET review_comment=? WHERE id=?', AUTO_COMMENT, Number(r.lastInsertRowid));
       id = Number(r.lastInsertRowid);
     }
     const after = getById(id);
     db.audit({
       actor, action: existing ? 'overtime.update' : 'overtime.create', entity: 'overtime_request', entityId: id,
       targetEmployeeId: emp.id, workDate: v.date, before: snapshot(existing), after: snapshot(after),
-      reason: reason || (existing ? '本人による再申請' : (asAdmin ? '管理者による代理入力' : '新規申請')),
+      reason: reason || (existing ? '本人による再申請' : (asAdmin ? '管理者による代理入力' : '新規申請')) + (!asAdmin && config.OVERTIME_AUTO_APPROVE ? '(自動承認)' : ''),
     });
     return after;
   });
@@ -100,7 +105,7 @@ function save({ actor, emp, input, asAdmin = false, reason = '' }) {
 }
 
 function remove({ actor, request, reason, asAdmin }) {
-  if (!asAdmin && request.status === 'approved') throw new HttpError(403, '承認済みの申請は取り消せません。管理者に依頼してください。');
+  if (!asAdmin && request.status === 'approved' && !config.OVERTIME_AUTO_APPROVE) throw new HttpError(403, '承認済みの申請は取り消せません。管理者に依頼してください。');
   if (asAdmin && !reason) throw new HttpError(400, '取り消しの理由を入力してください。');
   db.tx(() => {
     db.audit({ actor, action: 'overtime.delete', entity: 'overtime_request', entityId: request.id, targetEmployeeId: request.employeeId,

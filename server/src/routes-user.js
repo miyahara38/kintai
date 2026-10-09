@@ -40,7 +40,7 @@ function register(app) {
   rt('get', '/api/me', {}, ctx => {
     const u = auth.currentUser(ctx);
     if (!u) return { user: null };
-    return { user: auth.publicUser(u), punch: att.punchState(u.id), today: jstDate(Date.now()) };
+    return { user: auth.publicUser(u), punch: att.punchState(u.id), today: jstDate(Date.now()), autoApprove: config.OVERTIME_AUTO_APPROVE };
   });
 
   rt('post', '/api/me/password', { auth: 'user', allowMustChange: true }, ctx => {
