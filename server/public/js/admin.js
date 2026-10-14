@@ -153,6 +153,11 @@
     box.append(h('div', { class: 'card' },
       UI.periodNav(d.period, dir => { anchor = R.shiftPeriod(d.period, dir).start; render(); }, () => { anchor = today; render(); }, today),
       h('div', { class: 'btnrow' }, exportBtn('📊 Excel出力(全員・承認済みのみ)')),
+      h('div', { class: 'card-title mt' }, '既存アプリ(残業・公休・有給管理)へ渡すファイル'),
+      h('div', { class: 'btnrow' },
+        h('a', { class: 'btn sm linkbtn', href: `/api/admin/export-v61.json?anchor=${anchor}` }, '📤 打刻と残業(既存アプリ用)'),
+        h('a', { class: 'btn sm ghost linkbtn', href: `/api/admin/export-punches.csv?anchor=${anchor}` }, '📄 打刻一覧(CSV)')),
+      h('p', { class: 'note' }, '締め日のあとに、この期間のファイルを保存して、既存アプリの「サーバーの打刻・残業を取り込む」で読み込みます。'),
       h('p', { class: 'note' }, '集計は「承認済み」の残業申請だけが対象です。社員名の行を押すと、日ごとの詳細と修正ができます。')));
     box.append(h('div', { class: 'card tscroll' }, h('table', { class: 'tbl' },
       h('thead', {}, h('tr', {}, ...['社員', '出勤日数', '通常残業', '深夜', '半日', '休日8h内', '休日8h超', 'パート合計', '承認待ち', '警告'].map(t => h('th', {}, t)))),
@@ -232,7 +237,7 @@
       const sel = (key, opts) => { const el = h('select', { class: 'input' }, ...opts.map(([v, l]) => h('option', { value: v, selected: f[key] === v }, l))); el.addEventListener('change', () => { f[key] = el.value; if (key === 'kind') draw(); }); return el; };
       body.append(
         h('div', { class: 'field' }, h('label', { class: 'label' }, '社員コード(半角英数字)'), inp('code', { maxlength: '20' })),
-        h('div', { class: 'field' }, h('label', { class: 'label' }, '氏名(姓と名の間は半角スペース1つに統一)'), inp('name', { maxlength: '50' })),
+        h('div', { class: 'field' }, h('label', { class: 'label' }, '氏名(姓と名の間に空白を入れない。例: 宮原侑希)'), inp('name', { maxlength: '50' })),
         h('div', { class: 'row2 field' },
           h('div', {}, h('label', { class: 'label' }, '勤務区分'), sel('kind', [['full', '正社員'], ['part', 'パート']])),
           h('div', {}, h('label', { class: 'label' }, '権限'), sel('role', [['employee', '社員'], ['admin', '管理者']]))),

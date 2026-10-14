@@ -10,6 +10,7 @@ const ot = require('./overtime');
 const importer = require('./importer');
 const backup = require('./backup');
 const { buildPeriodWorkbook } = require('./exporter');
+const exportV61 = require('./export-v61');
 const { HttpError } = require('./http');
 const { jstDate } = require('./time');
 const { baseUrl } = require('./routes-user');
@@ -39,7 +40,7 @@ function parseEmployeeInput(b, partial) {
     o.code = code;
   }
   if (!partial || b.name !== undefined) {
-    const name = str(b.name, 50);
+    const name = str(b.name, 50).replace(/[\s\u3000]+/g, '');
     if (!name) throw new HttpError(400, '氏名を入力してください。');
     o.name = name;
   }
@@ -289,6 +290,21 @@ function register(app) {
     const out = buildPeriodWorkbook({ anchor, employeeId: ctx.query.employeeId ? Number(ctx.query.employeeId) : null });
     if (!out) throw new HttpError(404, 'この期間に出力できる(承認済みの)データがありません。');
     app.sendBuffer(ctx.res, ctx, out.buffer, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', out.filename);
+  });
+  // 既存アプリ(v61)へ渡すファイル(締め期間ごと)
+  const periodOpts = ctx => ({
+    anchor: R.isDateStr(ctx.query.anchor) ? ctx.query.anchor : jstDate(Date.now()),
+    employeeId: ctx.query.employeeId ? Number(ctx.query.employeeId) : null,
+  });
+  rt('get', '/api/admin/export-v61.json', A, ctx => {
+    const out = exportV61.buildJson(periodOpts(ctx));
+    if (!out.count) throw new HttpError(404, 'この期間に、出力できる打刻・残業のデータがありません。');
+    app.sendBuffer(ctx.res, ctx, out.buffer, 'application/json; charset=utf-8', out.filename);
+  });
+  rt('get', '/api/admin/export-punches.csv', A, ctx => {
+    const out = exportV61.buildCsv(periodOpts(ctx));
+    if (!out.count) throw new HttpError(404, 'この期間に、出力できる打刻のデータがありません。');
+    app.sendBuffer(ctx.res, ctx, out.buffer, 'text/csv; charset=utf-8', out.filename);
   });
   rt('post', '/api/admin/import/preview', { ...A, bodyLimit: 20 * 1024 * 1024 }, ctx => importer.preview(ctx.body.records));
   rt('post', '/api/admin/import/commit', { ...A, bodyLimit: 20 * 1024 * 1024 }, ctx => {

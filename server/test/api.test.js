@@ -372,6 +372,47 @@ test('セキュリティヘッダと静的ファイルのパストラバーサ�
   }
 });
 
+test('既存アプリ(v61)用の出力: JSON(打刻+承認済み残業)とCSV(数式無害化・BOM)・氏名の空白除去', async () => {
+  const a = await loggedIn(admin);
+  // 氏名は空白を除いて保存される
+  const cr = await a.post('/api/admin/employees', { code: 'S1', name: '宮原 侑 希', kind: 'full', pattern: 'pattern1' });
+  assert.strictEqual(cr.j.employee.name, '宮原侑希');
+  const s1 = db.get('SELECT * FROM employees WHERE code=?', 'S1');
+  const date = R.addDays(jstDate(Date.now()), -1);
+  const now = Date.now();
+  db.run("INSERT INTO punches(employee_id,type,ts,work_date,hhmm,source,created_at) VALUES(?,'in',?,?,'09:00','admin',?)", s1.id, now - 1e6, date, now);
+  db.run("INSERT INTO punches(employee_id,type,ts,work_date,hhmm,source,created_at) VALUES(?,'out',?,?,'20:10','admin',?)", s1.id, now - 5e5, date, now);
+  // 承認済み残業のある日
+  const emp = db.get('SELECT * FROM employees WHERE id=?', s1.id);
+  require('../src/overtime').save({ actor: emp, emp, input: { date, workType: 'normal', slots: [{ start: '19:00', end: '22:30', memo: '=1+1' }] }, asAdmin: true, reason: 'test' });
+  // 打刻だけの日
+  const date2 = R.addDays(date, -1);
+  db.run("INSERT INTO punches(employee_id,type,ts,work_date,hhmm,source,created_at) VALUES(?,'in',?,?,'09:05','admin',?)", s1.id, now - 9e6, date2, now);
+
+  const j = await a.f(`/api/admin/export-v61.json?anchor=${date}&employeeId=${s1.id}`);
+  assert.strictEqual(j.s, 200);
+  assert.match(j.h.get('content-disposition'), /attachment/);
+  const out = JSON.parse(j.buf.toString('utf8'));
+  assert.strictEqual(out.format, 'kintai-server-export');
+  const withOt = out.records.find(r => r.date === date), punchOnly = out.records.find(r => r.date === date2);
+  assert.strictEqual(withOt.staffName, '宮原侑希'); assert.strictEqual(withOt.clockIn, '09:00'); assert.strictEqual(withOt.clockOut, '20:10');
+  assert.strictEqual(withOt.overtimeFromRequest, true); assert.strictEqual(withOt.totalNormalMin, 180); assert.strictEqual(withOt.totalNightMin, 30);
+  assert.strictEqual(punchOnly.overtimeFromRequest, false); assert.deepStrictEqual(punchOnly.slots, []); assert.strictEqual(punchOnly.clockOut, '');
+
+  const c = await a.f(`/api/admin/export-punches.csv?anchor=${date}&employeeId=${s1.id}`);
+  assert.strictEqual(c.s, 200);
+  const text = c.buf.toString('utf8');
+  assert.ok(text.startsWith('﻿'), 'Excelで文字化けしないBOM付き');
+  assert.ok(text.includes('宮原侑希') && text.includes('09:00') && text.includes('20:10'));
+  assert.ok(text.includes('退勤の打刻漏れ'), '打刻漏れが備考に出る');
+  const { csvCell } = require('../src/export-v61');
+  assert.strictEqual(csvCell('=SUM(A1)'), "'=SUM(A1)"); assert.strictEqual(csvCell('a,b'), '"a,b"');
+  // 権限: 社員は取得できない
+  assert.strictEqual((await (await loggedIn(emp0())).f('/api/admin/export-v61.json')).s, 403);
+  assert.strictEqual((await new Client().f('/api/admin/export-punches.csv')).s, 401);
+  function emp0() { return { code: 'E2', pw: other.pw }; }
+});
+
 test('壊れた入力(壊れたCookie・URL・JSON)でもサーバーは落ちず・止まらず応答する', async () => {
   const r1 = await fetch(base + '/api/me', { headers: { cookie: 'kintai_sid=%E0%A4%A' } });
   assert.strictEqual(r1.status, 200);
