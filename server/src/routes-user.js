@@ -7,6 +7,7 @@ const R = require('../public/js/rules');
 const auth = require('./auth');
 const tokens = require('./tokens');
 const att = require('./attendance');
+const exportV61 = require('./export-v61');
 const { HttpError } = require('./http');
 const { jstDate, jstTime } = require('./time');
 const QR = require('../vendor/qrcode/core/qrcode');
@@ -90,6 +91,15 @@ function register(app) {
     const data = att.loadData(date, date, u.id);
     return att.buildDay(u, date, data.pm.get(u.id + '|' + date), data.rm.get(u.id + '|' + date), jstDate(Date.now()));
   });
+  // 自分の打刻を、既存アプリ(v61)に取り込むためのファイルとして保存する(本人の分だけ)
+  rt('get', '/api/me/export-v61.json', { auth: 'user' }, ctx => {
+    const u = auth.currentUser(ctx);
+    const anchor = R.isDateStr(ctx.query.anchor) ? ctx.query.anchor : jstDate(Date.now());
+    const out = exportV61.buildJson({ anchor, employeeId: u.id });
+    if (!out.count) throw new HttpError(404, 'この期間に、書き出せる打刻がありません。');
+    app.sendBuffer(ctx.res, ctx, out.buffer, 'application/json; charset=utf-8', out.filename);
+  });
+
   // ---------- 打刻用タブレット ----------
   rt('post', '/api/tablet/register', {}, ctx => {
     tokens.registerTablet(ctx, str(ctx.body.code, 64));

@@ -252,11 +252,6 @@ function register(app) {
     anchor: R.isDateStr(ctx.query.anchor) ? ctx.query.anchor : jstDate(Date.now()),
     employeeId: ctx.query.employeeId ? Number(ctx.query.employeeId) : null,
   });
-  rt('get', '/api/admin/export-v61.json', A, ctx => {
-    const out = exportV61.buildJson(periodOpts(ctx));
-    if (!out.count) throw new HttpError(404, 'この期間に、出力できる打刻・残業のデータがありません。');
-    app.sendBuffer(ctx.res, ctx, out.buffer, 'application/json; charset=utf-8', out.filename);
-  });
   rt('get', '/api/admin/export-punches.csv', A, ctx => {
     const out = exportV61.buildCsv(periodOpts(ctx));
     if (!out.count) throw new HttpError(404, 'この期間に、出力できる打刻のデータがありません。');
