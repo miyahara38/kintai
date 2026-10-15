@@ -84,17 +84,11 @@ test('権限: 未ログイン401・社員は管理APIに403・社員は他人の
   assert.strictEqual((await new Client().f('/api/admin/employees')).s, 401);
   assert.strictEqual((await new Client().f('/api/me/period')).s, 401);
   const e = await loggedIn(emp);
-  for (const p of ['/api/admin/employees', '/api/admin/day', '/api/admin/period', '/api/admin/audit', '/api/admin/export.xlsx', '/api/admin/backups', '/api/admin/tablets', '/api/admin/missing', '/api/admin/overtime']) {
+  for (const p of ['/api/admin/employees', '/api/admin/day', '/api/admin/period', '/api/admin/audit', '/api/admin/backups', '/api/admin/tablets', '/api/admin/missing']) {
     assert.strictEqual((await e.f(p)).s, 403, p);
   }
   assert.strictEqual((await e.post('/api/admin/employees', { code: 'X', name: 'x', kind: 'full', pattern: 'pattern1' })).s, 403);
   assert.strictEqual((await e.post('/api/admin/punch-fix', { employeeId: other.id })).s, 403);
-  // 他人の申請は取り消せない
-  const o = await loggedIn(other);
-  const d = jstDate(Date.now());
-  const made = await o.post('/api/me/overtime', { date: d, workType: 'normal', slots: [{ start: '19:00', end: '20:00' }] });
-  assert.strictEqual(made.s, 200);
-  assert.strictEqual((await e.post(`/api/me/overtime/${made.j.request.id}/delete`)).s, 404);
   // 自分の期間データに他人の申請が混ざらない
   const mine = await e.f('/api/me/period');
   assert.ok(mine.j.days.every(x => !x.request || x.request.employeeId === emp.id));
@@ -169,34 +163,6 @@ test('解除したタブレットのQRは使えない', async () => {
   assert.strictEqual((await e.post('/api/punch', { type: 'in', token: tk })).s, 400);
 });
 
-test('残業申請: 本人入力→承認待ち→管理者が承認/差し戻し、自己承認は不可、承認後は本人が修正不可', async () => {
-  const e = await loggedIn(emp);
-  const d = R.addDays(jstDate(Date.now()), -2);
-  const bad = await e.post('/api/me/overtime', { date: d, workType: 'normal', slots: [{ start: '23:00', end: '01:00' }] });
-  assert.strictEqual(bad.s, 400);
-  const tooOld = await e.post('/api/me/overtime', { date: R.addDays(jstDate(Date.now()), -40), workType: 'normal', slots: [{ start: '19:00', end: '20:00' }] });
-  assert.strictEqual(tooOld.s, 400);
-  const ok = await e.post('/api/me/overtime', { date: d, workType: 'normal', slots: [{ start: '19:00', end: '22:30', memo: '=HYPERLINK("x")' }], normalMin: 99999 });
-  assert.strictEqual(ok.s, 200);
-  assert.strictEqual(ok.j.request.normalMin, 180, '計算はサーバー側で行い、クライアントの値は信用しない');
-  assert.strictEqual(ok.j.request.nightMin, 30);
-  assert.strictEqual(ok.j.request.status, 'pending');
-  const id = ok.j.request.id;
-  const a = await loggedIn(admin);
-  // 差し戻しには理由が必要
-  assert.strictEqual((await a.post(`/api/admin/overtime/${id}/review`, { status: 'rejected' })).s, 400);
-  assert.strictEqual((await a.post(`/api/admin/overtime/${id}/review`, { status: 'rejected', comment: '時間を確認して' })).s, 200);
-  const re = await e.post('/api/me/overtime', { date: d, workType: 'normal', slots: [{ start: '19:00', end: '21:00' }] });
-  assert.strictEqual(re.j.request.status, 'pending');
-  assert.strictEqual((await a.post(`/api/admin/overtime/${id}/review`, { status: 'approved' })).s, 200);
-  assert.strictEqual((await e.post('/api/me/overtime', { date: d, workType: 'normal', slots: [{ start: '19:00', end: '20:00' }] })).s, 403);
-  // 自分の申請は承認できない
-  const own = await a.post('/api/admin/overtime', { employeeId: admin.id, date: d, workType: 'normal', slots: [{ start: '19:00', end: '20:00' }] });
-  assert.strictEqual(own.s, 200);
-  db.run("UPDATE overtime_requests SET status='pending' WHERE id=?", own.j.request.id);
-  assert.strictEqual((await a.post(`/api/admin/overtime/${own.j.request.id}/review`, { status: 'approved' })).s, 403);
-});
-
 test('食い違い警告: 申請終了が退勤より後は警告。「定時後の打刻で申請なし」は既定で出ない(設定で復活可)', async () => {
   const att = require('../src/attendance');
   config.WARN_NO_REQUEST = true; // 設定を有効にした場合の動作
@@ -224,35 +190,6 @@ test('食い違い警告: 申請終了が退勤より後は警告。「定時後
   assert.ok(dayOf('19:01', '21:00', rq([{ start: '19:00', end: '21:00' }])).warnings.some(w => w.code === 'REQ_BEFORE_IN'));
   assert.ok(dayOf('09:00', '', null).warnings.some(w => w.code === 'MISSING_OUT'), '打刻漏れは警告');
   assert.ok(dayOf('', '18:00', null).warnings.some(w => w.code === 'MISSING_IN'));
-});
-
-test('残業の自動承認: 申請と同時に承認済み・本人が修正でき、履歴が残る。手動承認の設定にも戻せる', async () => {
-  config.OVERTIME_AUTO_APPROVE = true;
-  try {
-    const e = await loggedIn(other);
-    const d = R.addDays(jstDate(Date.now()), -5);
-    const r1 = await e.post('/api/me/overtime', { date: d, workType: 'normal', slots: [{ start: '19:00', end: '20:00' }] });
-    assert.strictEqual(r1.s, 200);
-    assert.strictEqual(r1.j.request.status, 'approved');
-    assert.strictEqual(r1.j.request.reviewComment, '自動承認');
-    // 承認済みでも、本人が自分で直せる
-    const r2 = await e.post('/api/me/overtime', { date: d, workType: 'normal', slots: [{ start: '19:00', end: '20:30' }] });
-    assert.strictEqual(r2.s, 200); assert.strictEqual(r2.j.request.normalMin, 90); assert.strictEqual(r2.j.request.status, 'approved');
-    assert.ok(db.get("SELECT 1 AS x FROM audit_log WHERE action='overtime.update' AND reason LIKE '%自動承認%'"), '変更の履歴が残る');
-    // 管理者は差し戻せる → 本人が直して再提出すると、また自動承認
-    const a = await loggedIn(admin);
-    assert.strictEqual((await a.post(`/api/admin/overtime/${r1.j.request.id}/review`, { status: 'rejected', comment: '時間を確認' })).s, 200);
-    const r3 = await e.post('/api/me/overtime', { date: d, workType: 'normal', slots: [{ start: '19:00', end: '20:00' }] });
-    assert.strictEqual(r3.j.request.status, 'approved');
-    // 自動承認でも、今までどおり日付の範囲・日またぎ・不正入力は拒否
-    assert.strictEqual((await e.post('/api/me/overtime', { date: R.addDays(jstDate(Date.now()), -40), workType: 'normal', slots: [{ start: '19:00', end: '20:00' }] })).s, 400);
-    // 他人の申請は触れない
-    assert.strictEqual((await (await loggedIn(emp)).post(`/api/me/overtime/${r1.j.request.id}/delete`)).s, 404);
-    // 手動承認に戻すと、承認済みは本人が直せない
-    config.OVERTIME_AUTO_APPROVE = false;
-    assert.strictEqual((await e.post('/api/me/overtime', { date: d, workType: 'normal', slots: [{ start: '19:00', end: '20:00' }] })).s, 403);
-    assert.strictEqual((await e.f('/api/me')).j.autoApprove, false);
-  } finally { config.OVERTIME_AUTO_APPROVE = false; }
 });
 
 test('打刻修正: 元の記録は消えず、理由必須・履歴が残る。履歴は改ざん不可', async () => {
@@ -296,28 +233,6 @@ test('社員マスタ: 登録・仮パスワード・初回変更必須・無効
   const rs = await a.post(`/api/admin/employees/${emp.id}/reset-password`);
   assert.strictEqual(rs.s, 200); assert.ok(rs.j.tempPassword.length >= 8);
   assert.strictEqual((await new Client().post('/api/login', { code: 'E1', password: emp.pw })).s, 401);
-});
-
-test('Excel出力: 正社員・パートシート、打刻列、数式として実行されない', async () => {
-  const a = await loggedIn(admin);
-  const d = R.addDays(jstDate(Date.now()), -2);
-  const pt = await (await loggedIn(part)).post('/api/me/overtime', { date: d, partTimeOverMin: 30, partTimeMemo: '=1+1 患者対応' });
-  assert.strictEqual(pt.s, 200, JSON.stringify(pt.j));
-  assert.strictEqual((await a.post(`/api/admin/overtime/${pt.j.request.id}/review`, { status: 'approved' })).s, 200);
-  const r = await a.f(`/api/admin/export.xlsx?anchor=${d}`);
-  assert.strictEqual(r.s, 200);
-  assert.strictEqual(r.buf.slice(0, 2).toString(), 'PK');
-  assert.match(r.h.get('content-type'), /spreadsheetml/);
-  const { execFileSync } = require('node:child_process');
-  const f = path.join(tmp, 'out.xlsx'); fs.writeFileSync(f, r.buf);
-  let xml = '';
-  try { xml = ['xl/worksheets/sheet1.xml', 'xl/worksheets/sheet2.xml', 'xl/workbook.xml'].map(n => execFileSync('unzip', ['-p', f, n]).toString()).join('\n'); } catch { /* unzipがない環境 */ }
-  if (xml) {
-    assert.ok(xml.includes('出勤打刻') && xml.includes('退勤打刻'));
-    assert.ok(xml.includes('正社員') && xml.includes('パート'));
-    assert.ok(!/<f>/.test(xml), '数式セルが含まれない');
-    assert.ok(xml.includes("'=1+1"), '先頭が = の文字は文字列として無害化される');
-  }
 });
 
 test('バックアップ → 破損検査 → 復元', async () => {

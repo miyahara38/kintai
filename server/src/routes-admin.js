@@ -9,7 +9,6 @@ const att = require('./attendance');
 const ot = require('./overtime');
 const importer = require('./importer');
 const backup = require('./backup');
-const { buildPeriodWorkbook } = require('./exporter');
 const exportV61 = require('./export-v61');
 const { HttpError } = require('./http');
 const { jstDate } = require('./time');
@@ -204,43 +203,6 @@ function register(app) {
     return { period, items };
   });
 
-  // ---------- 残業申請 ----------
-  rt('get', '/api/admin/overtime', A, ctx => {
-    const status = ['pending', 'approved', 'rejected'].includes(ctx.query.status) ? ctx.query.status : 'pending';
-    const rows = db.all(
-      `SELECT o.*, e.name AS emp_name, e.code AS emp_code FROM overtime_requests o JOIN employees e ON e.id=o.employee_id
-       WHERE o.status=? ORDER BY o.work_date DESC, e.code LIMIT 300`, status);
-    const today = jstDate(Date.now());
-    return {
-      items: rows.map(r => {
-        const req = att.mapRequest(r);
-        const emp = db.get('SELECT * FROM employees WHERE id=?', r.employee_id);
-        const data = att.loadData(r.work_date, r.work_date, r.employee_id);
-        const day = att.buildDay(emp, r.work_date, data.pm.get(r.employee_id + '|' + r.work_date), req, today);
-        return { ...day, employee: { id: r.employee_id, name: r.emp_name, code: r.emp_code, kind: emp.kind } };
-      }),
-    };
-  });
-  rt('post', '/api/admin/overtime/:id/review', A, ctx => {
-    const actor = auth.currentUser(ctx);
-    const req = ot.getById(ctx.params.id);
-    if (!req) throw new HttpError(404, '申請が見つかりません。');
-    return { request: ot.review({ actor, request: req, status: ctx.body.status, comment: ctx.body.comment }) };
-  });
-  // 管理者による代理入力・修正(修正は理由必須。元の内容は修正履歴に残る)
-  rt('post', '/api/admin/overtime', A, ctx => {
-    const actor = auth.currentUser(ctx);
-    const emp = getEmp(ctx.body.employeeId);
-    const reason = str(ctx.body.reason, 300);
-    return ot.save({ actor, emp, input: ctx.body, asAdmin: true, reason: reason || '管理者による代理入力' });
-  });
-  rt('post', '/api/admin/overtime/:id/delete', A, ctx => {
-    const actor = auth.currentUser(ctx);
-    const req = ot.getById(ctx.params.id);
-    if (!req) throw new HttpError(404, '申請が見つかりません。');
-    ot.remove({ actor, request: req, reason: reqReason(ctx.body), asAdmin: true });
-  });
-
   // ---------- 打刻の修正(元の打刻は消さず無効扱いにして、新しい打刻を追加) ----------
   rt('post', '/api/admin/punch-fix', A, ctx => {
     const actor = auth.currentUser(ctx);
@@ -285,12 +247,6 @@ function register(app) {
   });
 
   // ---------- Excel出力・取り込み・バックアップ ----------
-  rt('get', '/api/admin/export.xlsx', A, ctx => {
-    const anchor = R.isDateStr(ctx.query.anchor) ? ctx.query.anchor : jstDate(Date.now());
-    const out = buildPeriodWorkbook({ anchor, employeeId: ctx.query.employeeId ? Number(ctx.query.employeeId) : null });
-    if (!out) throw new HttpError(404, 'この期間に出力できる(承認済みの)データがありません。');
-    app.sendBuffer(ctx.res, ctx, out.buffer, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', out.filename);
-  });
   // 既存アプリ(v61)へ渡すファイル(締め期間ごと)
   const periodOpts = ctx => ({
     anchor: R.isDateStr(ctx.query.anchor) ? ctx.query.anchor : jstDate(Date.now()),

@@ -7,7 +7,6 @@ const R = require('../public/js/rules');
 const auth = require('./auth');
 const tokens = require('./tokens');
 const att = require('./attendance');
-const ot = require('./overtime');
 const { HttpError } = require('./http');
 const { jstDate, jstTime } = require('./time');
 const QR = require('../vendor/qrcode/core/qrcode');
@@ -91,17 +90,6 @@ function register(app) {
     const data = att.loadData(date, date, u.id);
     return att.buildDay(u, date, data.pm.get(u.id + '|' + date), data.rm.get(u.id + '|' + date), jstDate(Date.now()));
   });
-  rt('post', '/api/me/overtime', { auth: 'user' }, ctx => {
-    const u = auth.currentUser(ctx);
-    return ot.save({ actor: u, emp: u, input: ctx.body });
-  });
-  rt('post', '/api/me/overtime/:id/delete', { auth: 'user' }, ctx => {
-    const u = auth.currentUser(ctx);
-    const r = ot.getById(ctx.params.id);
-    if (!r || r.employeeId !== u.id) throw new HttpError(404, '申請が見つかりません。');
-    ot.remove({ actor: u, request: r, asAdmin: false });
-  });
-
   // ---------- 打刻用タブレット ----------
   rt('post', '/api/tablet/register', {}, ctx => {
     tokens.registerTablet(ctx, str(ctx.body.code, 64));

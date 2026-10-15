@@ -1,15 +1,15 @@
 /* 管理画面(管理者のみ)。権限チェックはサーバー側で行われ、この画面はその結果を表示するだけ。 */
 (function () {
   'use strict';
-  const { h, clear, $, api, toast, F, sheet, dayCard, statusLabel, typeLabel } = UI;
+  const { h, clear, $, api, toast, F, sheet } = UI;
   const R = Rules;
   const main = $('main');
   let me = null, today = '';
-  let tab = 'day';
-  let dayDate = '', anchor = '';
+  let tab = 'period';
+  let anchor = '';
   let detailEmp = null;
 
-  const TABS = [['day', '日別'], ['period', '月別(締め期間)'], ['pending', '残業の承認'], ['missing', '打刻漏れ'],
+  const TABS = [['period', '月別(締め期間)'], ['missing', '打刻漏れ'],
     ['employees', '社員'], ['tablets', 'タブレット'], ['audit', '修正履歴'], ['data', 'データ(取込・バックアップ)']];
 
   const fmtTs = ms => { const d = new Date(ms + 9 * 3600e3); const p = n => String(n).padStart(2, '0');
@@ -24,7 +24,7 @@
     if (me.mustChangePw) { main.append(h('div', { class: 'alert warn' }, '最初にパスワードを変更してください。'), h('a', { class: 'btn linkbtn', href: '/me' }, 'パスワードを変更する')); return; }
     if (me.role !== 'admin') { main.append(h('div', { class: 'alert ng' }, 'この画面は管理者専用です。')); return; }
     $('who').textContent = me.name; $('btnLogout').classList.remove('hidden');
-    dayDate = today; anchor = today;
+    anchor = today;
     render();
   }
 
@@ -46,7 +46,7 @@
     clear(main);
     main.append(h('div', { class: 'admin-nav' }, ...TABS.map(([k, l]) => h('button', { type: 'button', class: k === tab ? 'active' : '', onclick: () => { tab = k; render(); } }, l))));
     const box = h('div', {}); main.append(box);
-    const fn = { day: tabDay, period: tabPeriod, pending: tabPending, missing: tabMissing, employees: tabEmployees, tablets: tabTablets, audit: tabAudit, data: tabData }[tab];
+    const fn = { period: tabPeriod, missing: tabMissing, employees: tabEmployees, tablets: tabTablets, audit: tabAudit, data: tabData }[tab];
     fn(box).catch(e => { clear(box).append(errBox(e)); });
   }
 
@@ -70,80 +70,6 @@
         } catch (e) { msg.append(errBox(e)); }
       } }, '修正する'),
       h('button', { class: 'btn ghost', type: 'button', onclick: () => s.close() }, 'キャンセル')));
-  }
-
-  function requestSheet(emp, date, existing, after) {
-    const f = RequestForm.fromRequest(emp, date, existing);
-    const reason = reasonField(); const msg = h('div', {});
-    const holder = h('div', {});
-    let s;
-    const draw = () => {
-      clear(holder);
-      const rf = RequestForm.build(emp, f, { locked: false, redraw: draw });
-      holder.append(rf.el);
-    };
-    draw();
-    s = sheet(`残業の${existing ? '修正' : '代理入力'}: ${emp.name} ${date}`, h('div', {},
-      existing ? h('div', { class: 'alert info' }, `現在の状態: ${statusLabel[existing.status]}。修正すると履歴に残ります。`) : h('div', { class: 'alert info' }, '代理入力した申請は、そのまま承認済みになります。'),
-      holder,
-      h('div', { class: 'field' }, h('label', { class: 'label' }, existing ? '修正の理由(必須)' : '理由(任意)'), reason), msg,
-      h('button', { class: 'btn', type: 'button', onclick: async () => {
-        clear(msg);
-        try {
-          const r = await api('/api/admin/overtime', { method: 'POST', body: { ...f, employeeId: emp.id, reason: reason.value } });
-          s.close(); toast('保存しました'); if (r.warnings.length) alert(r.warnings.map(w => '⚠ ' + w).join('\n')); after();
-        } catch (e) { msg.append(errBox(e)); }
-      } }, '保存する'),
-      existing ? h('button', { class: 'btn red', type: 'button', onclick: async () => {
-        clear(msg);
-        if (!reason.value.trim()) { msg.append(errBox(new Error('取り消しの理由を入力してください。'))); return; }
-        if (!confirm('この申請を取り消しますか?(履歴には残ります)')) return;
-        try { await api(`/api/admin/overtime/${existing.id}/delete`, { method: 'POST', body: { reason: reason.value } }); s.close(); toast('取り消しました'); after(); }
-        catch (e) { msg.append(errBox(e)); }
-      } }, '申請を取り消す') : null,
-      h('button', { class: 'btn ghost', type: 'button', onclick: () => s.close() }, 'キャンセル')));
-  }
-
-  function reviewButtons(item, after, rejectOnly) {
-    const r = item.request;
-    return h('div', { class: 'btnrow mt' },
-      rejectOnly ? null : h('button', { class: 'btn sm green', type: 'button', onclick: async () => {
-        try { await api(`/api/admin/overtime/${r.id}/review`, { method: 'POST', body: { status: 'approved' } }); toast('承認しました'); after(); } catch (e) { alert(e.message); }
-      } }, '承認'),
-      h('button', { class: 'btn sm red', type: 'button', onclick: () => {
-        const c = h('textarea', { class: 'input', rows: '2', maxlength: '300', placeholder: '差し戻しの理由(社員に表示されます)' });
-        const msg = h('div', {});
-        const s = sheet('差し戻し', h('div', {}, c, msg,
-          h('button', { class: 'btn red mt', type: 'button', onclick: async () => {
-            try { await api(`/api/admin/overtime/${r.id}/review`, { method: 'POST', body: { status: 'rejected', comment: c.value } }); s.close(); toast('差し戻しました'); after(); }
-            catch (e) { clear(msg).append(errBox(e)); }
-          } }, '差し戻す')));
-      } }, '差し戻し'));
-  }
-
-  function dayActions(emp, d, after) {
-    return h('div', { class: 'btnrow mt' },
-      h('button', { class: 'btn sm ghost', type: 'button', onclick: () => punchFixSheet(emp, d.date, d, after) }, '打刻を修正'),
-      h('button', { class: 'btn sm ghost', type: 'button', onclick: () => requestSheet(emp, d.date, d.request, after) }, d.request ? '残業を修正' : '残業を代理入力'));
-  }
-
-  // ---------- 日別 ----------
-  async function tabDay(box) {
-    const d = await api('/api/admin/day?date=' + dayDate);
-    const dateIn = h('input', { class: 'input', type: 'date', value: d.date });
-    dateIn.addEventListener('change', () => { if (R.isDateStr(dateIn.value)) { dayDate = dateIn.value; render(); } });
-    const shift = n => { dayDate = R.addDays(dayDate, n); render(); };
-    box.append(h('div', { class: 'card' },
-      h('div', { class: 'period' }, h('button', { class: 'pbtn', onclick: () => shift(-1) }, '◀'), dateIn, h('button', { class: 'pbtn', onclick: () => shift(1) }, '▶'),
-        h('button', { class: 'pbtn', onclick: () => { dayDate = today; render(); } }, '今日')),
-      h('div', { class: 'tscroll' }, h('table', { class: 'tbl' },
-        h('thead', {}, h('tr', {}, ...['社員', '出勤', '退勤', '残業申請', '警告', '操作'].map(t => h('th', {}, t)))),
-        h('tbody', {}, ...d.rows.map(r => h('tr', {},
-          h('td', {}, r.employee.name, UI.badge(r.employee.kind === 'part' ? 'パート' : '正社員', r.employee.kind === 'part' ? 'b-part' : 'b-gray')),
-          h('td', {}, r.clockIn || '-'), h('td', {}, r.clockOut || '-'),
-          h('td', {}, r.request ? [UI.badge(typeLabel[r.request.workType], 'b-gray'), UI.badge(statusLabel[r.request.status], UI.statusClass[r.request.status]), h('div', { class: 'small' }, UI.slotsText(r.request))] : '-'),
-          h('td', {}, r.warnings.length ? r.warnings.map(w => h('div', { class: 'warnline' }, '⚠ ' + w.text)) : ''),
-          h('td', {}, dayActions(r.employee, r, render)))))))));
   }
 
   // ---------- 月別(打刻のみ) ----------
@@ -177,23 +103,6 @@
         h('td', {}, h('button', { class: 'btn sm ghost', type: 'button', onclick: () => punchFixSheet(row.employee, x.date, x, after) }, '打刻を修正'))))))));
     body.append(h('button', { class: 'btn ghost mt', onclick: () => s.close() }, '閉じる'));
     const s = sheet(`${row.employee.name}さんの打刻`, body);
-  }
-
-  // ---------- 承認 ----------
-  let pendingStatus = 'pending';
-  async function tabPending(box) {
-    const d = await api('/api/admin/overtime?status=' + pendingStatus);
-    const sel = h('select', { class: 'input' }, ...[['pending', '承認待ち'], ['approved', '承認済み(新しい順)'], ['rejected', '差し戻し中']].map(([v, l]) => h('option', { value: v, selected: v === pendingStatus }, l)));
-    sel.addEventListener('change', () => { pendingStatus = sel.value; render(); });
-    box.append(h('div', { class: 'card' }, h('label', { class: 'label' }, '表示する状態'), sel,
-      h('p', { class: 'note' }, '社員が申請した残業は、自動で承認済みになります(設定で変更できます)。内容に問題がある申請は、「差し戻し」で社員に戻せます。承認済みの内容の修正は、「月別」「日別」から行えます。')));
-    if (!d.items.length) box.append(h('div', { class: 'card muted center' }, '該当する申請はありません'));
-    for (const it of d.items) {
-      const emp = { id: it.employee.id, name: it.employee.name, kind: it.employee.kind };
-      box.append(h('div', {}, dayCard(it, { extra: `${it.employee.name}(${it.employee.code})` }),
-        reviewButtons(it, render, it.request.status === 'approved'),
-        h('div', { class: 'mt' })));
-    }
   }
 
   // ---------- 打刻漏れ ----------

@@ -1,7 +1,7 @@
-/* 社員用(スマホ)画面: ログイン・打刻・勤怠一覧・残業申請 */
+/* 社員用(スマホ)画面: ログイン・打刻・打刻一覧 */
 (function () {
   'use strict';
-  const { h, clear, $, api, toast, F, typeLabel } = UI;
+  const { h, clear, $, api, toast, F } = UI;
   const R = Rules;
   const main = $('main');
   const qs = new URLSearchParams(location.search);
@@ -11,9 +11,9 @@
   let today = '';
   let tab = token ? 'punch' : 'punch';
   let anchor = '';
-  let autoApprove = false; // 残業申請を自動承認する設定(サーバーの設定)         // 勤怠一覧の締め期間の基準日
 
-  const TABS = [['punch', '🕘', '打刻'], ['days', '📋', '勤怠・申請'], ['settings', '⚙️', '設定']];
+
+  const TABS = [['punch', '🕘', '打刻'], ['days', '📋', '打刻一覧'], ['settings', '⚙️', '設定']];
 
   function showTabs(on) {
     const tb = $('tabbar');
@@ -25,7 +25,7 @@
   async function boot() {
     try {
       const r = await api('/api/me');
-      me = r.user; punch = r.punch; today = r.today || ''; autoApprove = !!r.autoApprove;
+      me = r.user; punch = r.punch; today = r.today || '';
     } catch (e) { me = null; main.append(h('div', { class: 'alert ng' }, e.message)); }
     $('btnLogout').onclick = async () => { await api('/api/logout', { method: 'POST' }); location.href = token ? '/p?t=' + encodeURIComponent(token) : '/me'; };
     $('btnAdmin').onclick = () => { location.href = '/admin'; };
@@ -56,7 +56,7 @@
       try {
         const r = await api('/api/login', { method: 'POST', body: { code: code.value.trim(), password: pw.value } });
         me = r.user;
-        const s = await api('/api/me'); punch = s.punch; today = s.today; autoApprove = !!s.autoApprove;
+        const s = await api('/api/me'); punch = s.punch; today = s.today;
         render();
       } catch (err) { msg.append(h('div', { class: 'alert ng' }, err.message)); btn.disabled = false; }
     } },
@@ -150,7 +150,7 @@
     }
   }
 
-  // ---------- 勤怠一覧 ----------
+  // ---------- 打刻一覧 ----------
   async function renderDays() {
     if (!anchor) anchor = today;
     const box = h('div', {}, h('div', { class: 'muted' }, '読み込み中…'));
@@ -159,65 +159,16 @@
     try { d = await api('/api/me/period?anchor=' + anchor); } catch (e) { clear(box).append(h('div', { class: 'alert ng' }, e.message)); return; }
     clear(box);
     box.append(h('div', { class: 'card' },
-      h('div', { class: 'card-title' }, '📊 期間集計(承認済み)'),
-      UI.periodNav(d.period, dir => { anchor = (R.shiftPeriod(d.period, dir)).start; render(); }, () => { anchor = today; render(); }, today),
-      UI.totalsTiles(d.totals),
-      d.pendingCount ? h('p', { class: 'note' }, `承認待ちが ${d.pendingCount} 件あります(集計には含まれません)。`) : null),
-      h('button', { class: 'btn', type: 'button', onclick: () => openForm(today) }, '＋ 残業を申請する'),
-      h('div', { class: 'mt' }));
-    if (!d.days.length) box.append(h('div', { class: 'card muted center' }, 'この期間のデータはありません'));
-    for (const day of d.days.slice().reverse()) box.append(UI.dayCard(day, { onEdit: x => openForm(x.date) }));
-  }
-
-  // ---------- 残業申請フォーム ----------
-  async function loadForm(date) {
-    let f = RequestForm.emptyForm(me, date);
-    let status = null, comment = '', id = null;
-    if (R.isDateStr(date)) {
-      try {
-        const d = await api('/api/me/day?date=' + date);
-        if (d.request) { f = RequestForm.fromRequest(me, date, d.request); status = d.request.status; comment = d.request.reviewComment; id = d.request.id; }
-      } catch { /* 取得できなくても入力は続けられる */ }
+      h('div', { class: 'card-title' }, '🕘 打刻の一覧'),
+      UI.periodNav(d.period, dir => { anchor = (R.shiftPeriod(d.period, dir)).start; render(); }, () => { anchor = today; render(); }, today)));
+    const days = d.days.filter(x => x.clockIn || x.clockOut || x.warnings.some(w => w.code === 'MISSING_IN' || w.code === 'MISSING_OUT'));
+    if (!days.length) box.append(h('div', { class: 'card muted center' }, 'この期間の打刻はありません'));
+    for (const day of days.slice().reverse()) {
+      box.append(h('div', { class: 'day' },
+        h('div', { class: 'day-top' }, h('div', { class: 'date' }, `${day.date}(${day.dow})`)),
+        h('div', { class: 'punches' }, `出勤 ${day.clockIn || '--:--'} / 退勤 ${day.clockOut || '--:--'}`),
+        ...day.warnings.filter(w => w.code === 'MISSING_IN' || w.code === 'MISSING_OUT').map(w => h('div', { class: 'warnline' }, '⚠ ' + w.text))));
     }
-    return { f, status, comment, id };
-  }
-
-  async function openForm(date) {
-    clear(main); showTabs(false);
-    drawForm(await loadForm(date));
-  }
-
-  function drawForm(st) {
-    const f = st.f;
-    clear(main);
-    const locked = st.status === 'approved' && !autoApprove;
-    const dateIn = h('input', { class: 'input', type: 'date', value: f.date, required: true, disabled: locked });
-    dateIn.addEventListener('change', async () => { if (R.isDateStr(dateIn.value)) drawForm(await loadForm(dateIn.value)); });
-    const rf = RequestForm.build(me, f, { locked, redraw: () => drawForm(st) });
-    const msg = h('div', {});
-    const submit = h('button', { class: 'btn', type: 'submit', disabled: locked }, st.id ? '申請内容を保存する(再申請)' : '申請する');
-    main.append(h('form', { onsubmit: async e => {
-      e.preventDefault(); submit.disabled = true; clear(msg);
-      try {
-        const r = await api('/api/me/overtime', { method: 'POST', body: f });
-        toast(st.id ? '申請を更新しました' : '申請しました');
-        if (r.warnings && r.warnings.length) alert('申請しました。\n\n' + r.warnings.map(w => '⚠ ' + w).join('\n'));
-        tab = 'days'; render();
-      } catch (err) { msg.append(h('div', { class: 'alert ng' }, err.message)); submit.disabled = false; }
-    } },
-      h('div', { class: 'card' },
-        h('div', { class: 'card-title' }, st.id ? '✏️ 残業申請の確認・修正' : '📝 残業申請'),
-        st.status ? h('div', { class: 'alert ' + (st.status === 'approved' ? 'ok' : st.status === 'rejected' ? 'ng' : 'warn') },
-          `状態: ${UI.statusLabel[st.status]}${st.comment ? '\nコメント: ' + st.comment : ''}${locked ? '\n承認済みのため修正できません。修正が必要な場合は管理者に依頼してください。' : ''}`) : null,
-        h('div', { class: 'field' }, h('label', { class: 'label' }, '日付'), dateIn),
-        rf.el),
-      msg, submit,
-      st.id && !locked ? h('button', { class: 'btn red', type: 'button', onclick: async () => {
-        if (!confirm('この申請を取り消しますか?')) return;
-        try { await api(`/api/me/overtime/${st.id}/delete`, { method: 'POST', body: {} }); toast('取り消しました'); tab = 'days'; render(); }
-        catch (err) { msg.append(h('div', { class: 'alert ng' }, err.message)); }
-      } }, '申請を取り消す') : null,
-      h('button', { class: 'btn ghost', type: 'button', onclick: () => { tab = 'days'; render(); } }, '戻る')));
   }
 
   // ---------- 設定 ----------
