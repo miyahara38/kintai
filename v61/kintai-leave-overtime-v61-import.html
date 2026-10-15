@@ -6567,7 +6567,8 @@ function v52SavePartFromForm(rec){
       saveBackup('v61_before-import');
       var res = applyImport(incoming);
       saveAndRender();
-      alert('取り込みました。\n\n新しく追加: ' + res.added + '件\n更新: ' + res.updated + '件\n変更なし: ' + res.unchanged + '件' +
+      var found = refreshPunchIssues(true) || { ot: [], leave: [] };
+      alert((found.ot.length + found.leave.length ? '⚠️ 打刻と、残業・公休・有給の記録に、食い違いが ' + (found.ot.length + found.leave.length) + '件 あります。\n画面の上の警告を確認してください。\n\n' : '') + '取り込みました。\n\n新しく追加: ' + res.added + '件\n更新: ' + res.updated + '件\n変更なし: ' + res.unchanged + '件' +
         (res.leaveSkipped ? '\n公休・有給の日のため、残業の内容を更新しなかった: ' + res.leaveSkipped + '件' : ''));
     });
   }
@@ -6589,6 +6590,70 @@ function v52SavePartFromForm(rec){
       alert('復元しました。画面を再読み込みします。');
       location.reload();
     });
+  }
+
+  // ---------- 打刻と、残業・公休・有給の食い違いチェック ----------
+  // 取り込んだ出勤・退勤の打刻と、このアプリの残業・公休・有給の記録を見比べて、食い違いを警告する。
+  // 警告は、「残業」の一覧の上と、「公休・有給管理」の上に表示する(記録は変更しない)。
+  var toMin = function (t) { var m = /^(\d{2}):(\d{2})$/.exec(String(t || '')); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+  function todayStr() { var d = new Date(); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+
+  function findPunchIssues() {
+    var ot = [], leave = [], today = todayStr();
+    var recs = (typeof overtimeRecords !== 'undefined' && Array.isArray(overtimeRecords)) ? overtimeRecords : [];
+    recs.forEach(function (r) {
+      if (!r || !DATE_RE.test(String(r.date || ''))) return;
+      var who = r.staffName + ' ' + r.date + ': ';
+      var cin = toMin(r.clockIn), cout = toMin(r.clockOut), hasIn = cin !== null, hasOut = cout !== null;
+      var isLeaveDay = r.workType === 'off' || r.workType === 'paid';
+      if (isLeaveDay) {
+        if (hasIn || hasOut) leave.push(who + (r.workType === 'off' ? '公休' : '有給') + 'の日に、出勤・退勤の打刻があります(' + (r.clockIn || '--:--') + ' 〜 ' + (r.clockOut || '--:--') + ')');
+        return;
+      }
+      var slots = (Array.isArray(r.slots) ? r.slots : []).filter(function (x) { return x && toMin(x.start) !== null && toMin(x.end) !== null; });
+      var ptOver = r.workType === 'parttime' && Number(r.partTimeOverMin) > 0;
+      if ((slots.length || ptOver) && !hasIn && !hasOut) { ot.push(who + '残業の記録があるのに、出勤・退勤の打刻がありません'); return; }
+      if (r.date < today && (hasIn !== hasOut) && r.workType !== 'half') ot.push(who + (hasIn ? '退勤' : '出勤') + 'の打刻がありません(打刻漏れ)');
+      if (slots.length) {
+        var first = Math.min.apply(null, slots.map(function (x) { return toMin(x.start); }));
+        var last = Math.max.apply(null, slots.map(function (x) { return toMin(x.end); }));
+        if (hasOut && last > cout) ot.push(who + '残業の終了(' + pad2(Math.floor(last / 60)) + ':' + pad2(last % 60) + ')が、退勤の打刻(' + r.clockOut + ')より後になっています');
+        if (hasIn && first < cin) ot.push(who + '残業の開始(' + pad2(Math.floor(first / 60)) + ':' + pad2(first % 60) + ')が、出勤の打刻(' + r.clockIn + ')より前になっています');
+      }
+    });
+    ot.sort(); leave.sort();
+    return { ot: ot, leave: leave };
+  }
+
+  function drawIssueBox(id, title, lines, place) {
+    var box = document.getElementById(id);
+    if (!box) { box = document.createElement('div'); box.id = id; place(box); }
+    if (!box.parentNode) return;
+    while (box.firstChild) box.removeChild(box.firstChild);
+    if (!lines.length) { box.style.display = 'none'; return; }
+    box.style.display = '';
+    box.className = 'mb-3 p-3 rounded-lg border border-red-300 bg-red-50 text-red-700 text-sm';
+    var head = document.createElement('div'); head.className = 'font-bold';
+    head.textContent = '⚠️ ' + title + '(' + lines.length + '件)'; box.appendChild(head);
+    var list = document.createElement('div'); list.className = 'font-normal mt-1'; list.style.cssText = 'max-height:12rem;overflow-y:auto';
+    lines.slice(0, 200).forEach(function (t) { var d = document.createElement('div'); d.textContent = '・' + t; list.appendChild(d); });
+    box.appendChild(list);
+  }
+
+  var lastSig = null;
+  function refreshPunchIssues(force) {
+    var sig = ''; try { sig = (localStorage.getItem('overtime_records') || '') + todayStr(); } catch (e) { /* 保存できない環境 */ }
+    if (!force && sig === lastSig) return; lastSig = sig;
+    var res = findPunchIssues();
+    drawIssueBox('kintaiWarnOvertime', '打刻と残業の記録に食い違いがあります', res.ot, function (box) {
+      var title = document.getElementById('attendanceListTitle'), head = title && title.parentNode;
+      if (head && head.parentNode) head.parentNode.insertBefore(box, head);
+    });
+    drawIssueBox('kintaiWarnLeave', '打刻と公休・有給の記録に食い違いがあります', res.leave, function (box) {
+      var sec = document.getElementById('leaveManagement');
+      if (sec && sec.firstElementChild) sec.insertBefore(box, sec.firstElementChild.nextSibling);
+    });
+    return res;
   }
 
   // ---------- ボタンの追加 ----------
@@ -6615,6 +6680,15 @@ function v52SavePartFromForm(rec){
     addButton(holder, '📂 バックアップから復元', 'bg-amber-600 hover:bg-amber-700', function () { restoreInput.click(); }).id = 'btnRestoreAll';
     if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(holder, anchor.nextSibling);
     else { holder.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:9999;background:#fff;padding:8px;border:1px solid #cbd5e1;border-radius:8px'; document.body.appendChild(holder); }
+    // 食い違いの警告: 起動時・記録の保存時・公休有給の変更時に更新する
+    try {
+      if (typeof window.saveAndRender === 'function') {
+        var prev = window.saveAndRender;
+        window.saveAndRender = function () { var r = prev.apply(this, arguments); refreshPunchIssues(true); return r; };
+      }
+    } catch (e) { /* 警告の更新に失敗しても、アプリは動かす */ }
+    refreshPunchIssues(true);
+    setInterval(function () { refreshPunchIssues(false); }, 2000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
