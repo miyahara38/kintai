@@ -146,40 +146,37 @@
           h('td', {}, dayActions(r.employee, r, render)))))))));
   }
 
-  // ---------- 月別 ----------
+  // ---------- 月別(打刻のみ) ----------
+  const punchWarn = d => d.warnings.filter(w => w.code === 'MISSING_IN' || w.code === 'MISSING_OUT');
   async function tabPeriod(box) {
     const d = await api('/api/admin/period?anchor=' + anchor);
-    const exportBtn = (label, empId) => h('a', { class: 'btn sm green linkbtn', href: `/api/admin/export.xlsx?anchor=${anchor}${empId ? '&employeeId=' + empId : ''}` }, label);
     box.append(h('div', { class: 'card' },
       UI.periodNav(d.period, dir => { anchor = R.shiftPeriod(d.period, dir).start; render(); }, () => { anchor = today; render(); }, today),
-      h('div', { class: 'btnrow' }, exportBtn('📊 Excel出力(全員・承認済みのみ)')),
-      h('div', { class: 'card-title mt' }, '既存アプリ(残業・公休・有給管理)へ渡すファイル'),
-      h('div', { class: 'btnrow' },
-        h('a', { class: 'btn sm linkbtn', href: `/api/admin/export-v61.json?anchor=${anchor}` }, '📤 打刻と残業(既存アプリ用)'),
-        h('a', { class: 'btn sm ghost linkbtn', href: `/api/admin/export-punches.csv?anchor=${anchor}` }, '📄 打刻一覧(CSV)')),
-      h('p', { class: 'note' }, '締め日のあとに、この期間のファイルを保存して、既存アプリの「サーバーの打刻・残業を取り込む」で読み込みます。'),
-      h('p', { class: 'note' }, '集計は「承認済み」の残業申請だけが対象です。社員名の行を押すと、日ごとの詳細と修正ができます。')));
+      h('div', { class: 'btnrow' }, h('a', { class: 'btn sm ghost linkbtn', href: `/api/admin/export-punches.csv?anchor=${anchor}` }, '📄 打刻一覧(CSV)')),
+      h('p', { class: 'note' }, '社員名を押すと、日ごとの出勤・退勤の打刻を確認し、修正できます。')));
     box.append(h('div', { class: 'card tscroll' }, h('table', { class: 'tbl' },
-      h('thead', {}, h('tr', {}, ...['社員', '出勤日数', '通常残業', '深夜', '半日', '休日8h内', '休日8h超', 'パート合計', '承認待ち', '警告'].map(t => h('th', {}, t)))),
-      h('tbody', {}, ...d.rows.map(r => h('tr', {},
-        h('td', {}, h('button', { class: 'btn sm ghost', type: 'button', onclick: () => detailSheet(r, d.period) }, r.employee.name)),
-        h('td', {}, String(r.workDays)), h('td', {}, F(r.totals.normal)), h('td', {}, F(r.totals.night)), h('td', {}, F(r.totals.half)),
-        h('td', {}, F(r.totals.holiday)), h('td', {}, F(r.totals.holidayOver8)), h('td', {}, F(r.totals.part)),
-        h('td', {}, r.pending ? UI.badge(String(r.pending), 'b-wait') : '0'), h('td', {}, r.warnings ? UI.badge(String(r.warnings), 'b-ng') : '0'))),
-        h('tr', {}, h('td', {}, h('b', {}, '合計')), h('td', {}), h('td', {}, F(d.grand.normal)), h('td', {}, F(d.grand.night)), h('td', {}, F(d.grand.half)),
-          h('td', {}, F(d.grand.holiday)), h('td', {}, F(d.grand.holidayOver8)), h('td', {}, F(d.grand.part)), h('td', {}), h('td', {}))))));
+      h('thead', {}, h('tr', {}, ...['社員', '出勤日数', '打刻漏れ'].map(t => h('th', {}, t)))),
+      h('tbody', {}, ...d.rows.map(r => {
+        const miss = r.days.reduce((a, x) => a + punchWarn(x).length, 0);
+        return h('tr', {},
+          h('td', {}, h('button', { class: 'btn sm ghost', type: 'button', onclick: () => detailSheet(r) }, r.employee.name)),
+          h('td', {}, String(r.workDays)), h('td', {}, miss ? UI.badge(String(miss), 'b-ng') : '0'));
+      })))));
   }
 
-  function detailSheet(row, period) {
+  function detailSheet(row) {
     const body = h('div', {});
     const after = () => { s.close(); render(); };
-    body.append(h('div', { class: 'btnrow' }, h('a', { class: 'btn sm green linkbtn', href: `/api/admin/export.xlsx?anchor=${period.start}&employeeId=${row.employee.id}` }, '📊 この人のExcel出力')));
-    body.append(UI.totalsTiles(row.totals));
-    body.append(h('div', { class: 'mt' }));
-    if (!row.days.length) body.append(h('p', { class: 'muted' }, 'この期間のデータはありません'));
-    for (const day of row.days) body.append(h('div', {}, dayCard(day), dayActions(row.employee, day, after)));
+    const days = row.days.filter(x => x.clockIn || x.clockOut || punchWarn(x).length);
+    if (!days.length) body.append(h('p', { class: 'muted' }, 'この期間の打刻はありません'));
+    else body.append(h('div', { class: 'tscroll' }, h('table', { class: 'tbl' },
+      h('thead', {}, h('tr', {}, ...['日付', '出勤', '退勤', '確認', '操作'].map(t => h('th', {}, t)))),
+      h('tbody', {}, ...days.map(x => h('tr', {},
+        h('td', {}, `${x.date}(${x.dow})`), h('td', {}, x.clockIn || '-'), h('td', {}, x.clockOut || '-'),
+        h('td', {}, punchWarn(x).map(w => h('div', { class: 'warnline' }, '⚠ ' + w.text))),
+        h('td', {}, h('button', { class: 'btn sm ghost', type: 'button', onclick: () => punchFixSheet(row.employee, x.date, x, after) }, '打刻を修正'))))))));
     body.append(h('button', { class: 'btn ghost mt', onclick: () => s.close() }, '閉じる'));
-    const s = sheet(`${row.employee.name}さんの詳細`, body);
+    const s = sheet(`${row.employee.name}さんの打刻`, body);
   }
 
   // ---------- 承認 ----------
