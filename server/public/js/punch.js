@@ -162,7 +162,7 @@
       h('div', { class: 'card-title' }, '🕘 打刻の一覧'),
       UI.periodNav(d.period, dir => { anchor = (R.shiftPeriod(d.period, dir)).start; render(); }, () => { anchor = today; render(); }, today),
       h('a', { class: 'btn linkbtn', href: `/api/me/export-v61.json?anchor=${d.period.start}` }, '📤 自分の打刻を、既存アプリ用に保存'),
-      h('p', { class: 'note' }, '締め日のあとに、この期間のファイルを保存して、パソコンの既存アプリ(残業・公休・有給管理)の「サーバーの打刻・残業を取り込む」で読み込みます。')));
+      h('p', { class: 'note' }, '締め日のあとに、この期間のファイルを保存して、パソコンの既存アプリ(残業・公休・有給管理)の「打刻を取り込む」で読み込みます。')));
     const days = d.days.filter(x => x.clockIn || x.clockOut || x.warnings.some(w => w.code === 'MISSING_IN' || w.code === 'MISSING_OUT'));
     if (!days.length) box.append(h('div', { class: 'card muted center' }, 'この期間の打刻はありません'));
     for (const day of days.slice().reverse()) {
