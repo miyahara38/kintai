@@ -293,7 +293,7 @@ test('既存アプリ(v61)用の出力: 社員本人の打刻JSON(残業は含�
   const cr = await a.post('/api/admin/employees', { code: 'S1', name: '宮原 侑 希', kind: 'full', pattern: 'pattern1' });
   assert.strictEqual(cr.j.employee.name, '宮原侑希');
   const s1 = db.get('SELECT * FROM employees WHERE code=?', 'S1');
-  const date = R.addDays(jstDate(Date.now()), -1);
+  const date = '2026-09-20'; // 締め期間(9/16〜10/15)の中ほど。今日の日付に左右されないよう固定
   const now = Date.now();
   db.run("INSERT INTO punches(employee_id,type,ts,work_date,hhmm,source,created_at) VALUES(?,'in',?,?,'09:00','admin',?)", s1.id, now - 1e6, date, now);
   db.run("INSERT INTO punches(employee_id,type,ts,work_date,hhmm,source,created_at) VALUES(?,'out',?,?,'20:10','admin',?)", s1.id, now - 5e5, date, now);
