@@ -11,6 +11,7 @@
     <meta name="format-detection" content="telephone=no">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <link rel="icon" type="image/png" href="icon-192.png">
+    <link rel="manifest" href="mobile.webmanifest">
     <title>勤怠・残業管理システム（スマホ版）</title>
     
     <style>
@@ -7091,5 +7092,12 @@ function v52SavePartFromForm(rec){
 })();
 </script>
 
+<script id="mobile-sw">
+if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {
+    window.addEventListener("load", function () {
+        navigator.serviceWorker.register("sw-mobile.js", { scope: "./mobile.html" }).catch(function () { /* 登録できなくてもアプリは動く */ });
+    });
+}
+</script>
 </body>
 </html>
