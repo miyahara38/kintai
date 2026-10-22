@@ -53,22 +53,38 @@
   // ---------- ダイアログ ----------
   function reasonField() { return h('textarea', { class: 'input', rows: '2', maxlength: '300', placeholder: '例: 打刻を忘れたため本人申告で修正' }); }
 
-  function punchFixSheet(emp, date, day, after) {
+  // days を渡すと、日付を自分で選べる(出勤・退勤の両方を忘れた日の追加用)。days は、その人の日ごとの打刻の一覧
+  function punchFixSheet(emp, date, day, after, days, range) {
+    const picker = days ? h('input', { class: 'input', type: 'date', value: date, min: range.min, max: range.max }) : null;
+    const curDate = () => (picker ? picker.value : date);
+    let cur = day;
     const inT = h('input', { class: 'input', type: 'time', value: day.clockIn });
     const outT = h('input', { class: 'input', type: 'time', value: day.clockOut });
     const reason = reasonField(); const msg = h('div', {});
-    const s = sheet(`打刻の修正: ${emp.name} ${date}`, h('div', {},
-      h('p', { class: 'note' }, '修正しても元の打刻は消えず、履歴に残ります。時刻を空にすると、その打刻を無効にします。'),
+    if (picker) picker.addEventListener('change', () => {
+      cur = days.find(x => x.date === picker.value) || { clockIn: '', clockOut: '' };
+      inT.value = cur.clockIn || ''; outT.value = cur.clockOut || '';
+    });
+    const s = sheet(picker ? `打刻の追加・修正: ${emp.name}` : `打刻の修正: ${emp.name} ${date}`, h('div', {},
+      h('p', { class: 'note' }, picker
+        ? '出勤・退勤の両方を忘れた日など、日付を選んで打刻を入れられます。修正しても元の打刻は消えず、履歴に残ります。'
+        : '修正しても元の打刻は消えず、履歴に残ります。時刻を空にすると、その打刻を無効にします。'),
+      picker ? h('div', { class: 'field' }, h('label', { class: 'label' }, '日付'), picker) : null,
       h('div', { class: 'row2 field' }, h('div', {}, h('label', { class: 'label' }, '出勤'), inT), h('div', {}, h('label', { class: 'label' }, '退勤'), outT)),
       h('div', { class: 'field' }, h('label', { class: 'label' }, '修正の理由(必須)'), reason), msg,
       h('button', { class: 'btn', type: 'button', onclick: async () => {
         clear(msg);
+        const d = curDate();
         try {
-          if (inT.value !== day.clockIn) await api('/api/admin/punch-fix', { method: 'POST', body: { employeeId: emp.id, date, type: 'in', hhmm: inT.value, reason: reason.value } });
-          if (outT.value !== day.clockOut) await api('/api/admin/punch-fix', { method: 'POST', body: { employeeId: emp.id, date, type: 'out', hhmm: outT.value, reason: reason.value } });
+          if (!R.isDateStr(d)) throw new Error('日付を選んでください。');
+          if (d > today) throw new Error('未来の日付は選べません。');
+          if (range && (d < range.min || d > range.max)) throw new Error(`日付は ${range.min} 〜 ${range.max} の間で選んでください(いま見ている締め期間の中です)。`);
+          if (inT.value === (cur.clockIn || '') && outT.value === (cur.clockOut || '')) throw new Error('出勤・退勤の時刻が、変わっていません。');
+          if (inT.value !== (cur.clockIn || '')) await api('/api/admin/punch-fix', { method: 'POST', body: { employeeId: emp.id, date: d, type: 'in', hhmm: inT.value, reason: reason.value } });
+          if (outT.value !== (cur.clockOut || '')) await api('/api/admin/punch-fix', { method: 'POST', body: { employeeId: emp.id, date: d, type: 'out', hhmm: outT.value, reason: reason.value } });
           s.close(); toast('修正しました'); after();
         } catch (e) { msg.append(errBox(e)); }
-      } }, '修正する'),
+      } }, picker ? '保存する' : '修正する'),
       h('button', { class: 'btn ghost', type: 'button', onclick: () => s.close() }, 'キャンセル')));
   }
 
@@ -85,15 +101,22 @@
       h('tbody', {}, ...d.rows.map(r => {
         const miss = r.days.reduce((a, x) => a + punchWarn(x).length, 0);
         return h('tr', {},
-          h('td', {}, h('button', { class: 'btn sm ghost', type: 'button', onclick: () => detailSheet(r) }, r.employee.name)),
+          h('td', {}, h('button', { class: 'btn sm ghost', type: 'button', onclick: () => detailSheet(r, d.period) }, r.employee.name)),
           h('td', {}, String(r.workDays)), h('td', {}, miss ? UI.badge(String(miss), 'b-ng') : '0'));
       })))));
   }
 
-  function detailSheet(row) {
+  function detailSheet(row, period) {
     const body = h('div', {});
     const after = () => { s.close(); render(); };
     const days = row.days.filter(x => x.clockIn || x.clockOut || punchWarn(x).length);
+    const range = { min: period.start, max: period.end < today ? period.end : today };
+    if (range.min <= range.max) {
+      const startDate = range.max;
+      const startDay = row.days.find(x => x.date === startDate) || { clockIn: '', clockOut: '' };
+      body.append(h('button', { class: 'btn', type: 'button', onclick: () => punchFixSheet(row.employee, startDate, startDay, after, row.days, range) }, '＋ 日付を選んで、打刻を追加・修正'));
+    }
+    body.append(h('div', { class: 'mt' }));
     if (!days.length) body.append(h('p', { class: 'muted' }, 'この期間の打刻はありません'));
     else body.append(h('div', { class: 'tscroll' }, h('table', { class: 'tbl' },
       h('thead', {}, h('tr', {}, ...['日付', '出勤', '退勤', '確認', '操作'].map(t => h('th', {}, t)))),
