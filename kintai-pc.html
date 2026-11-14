@@ -4241,7 +4241,8 @@ function v52SavePartFromForm(rec){
     window.v31HasOvertimeApplication = function(r){
         if(!r) return false;
         if(r.workType === "parttime"){
-            return Math.max(0, Math.round(Number(r.partTimeOverMin)||0)) > 0;
+            // パートは残業0分でも、登録した勤務時間を一覧に表示する。
+            return true;
         }
         const slots = Array.isArray(r.slots) ? r.slots : [];
         const hasValidSlot = slots.some(x=>x && x.start && x.end);
