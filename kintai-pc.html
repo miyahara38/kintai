@@ -7620,5 +7620,88 @@ function v52SavePartFromForm(rec){
 })();
 </script>
 
+<script id="v63-paid-history-and-grant-dates">
+/* v63: 有給管理Excelに付与日以降の取得履歴を出す／付与日・管理終了日を常に表示 */
+(function(){
+    const $=id=>document.getElementById(id);
+    const staffKey=()=>v52Norm($('leaveStaffName').value);
+    const staffRecs=()=>{const k=staffKey();return k?leaveRecords.filter(r=>v52Norm(r.staffName)===k):[];};
+
+    // ---- 付与日・管理終了日は、期間を替えても常に表示（未設定の期間は直近の設定を引き継ぐ） ----
+    function fillDates(){
+        const g=$('paidGrantDate'),e=$('paidBalanceEnd');if(!g||!e||!staffKey())return;
+        const end=$('leavePeriodEnd').value||'9999-12-31';
+        const recs=staffRecs().filter(r=>r.paidGrantDate||r.paidBalanceEnd);
+        if(!recs.length)return;
+        // 表示中の期間以前で、最も新しい設定を優先。なければ最も新しい設定。
+        const before=recs.filter(r=>r.start<=end).sort((a,b)=>b.start.localeCompare(a.start));
+        const pick=(before.length?before:recs.slice().sort((a,b)=>b.start.localeCompare(a.start)))[0];
+        if(!g.value&&pick.paidGrantDate)g.value=pick.paidGrantDate;
+        if(!e.value){
+            const withEnd=(before.length?before:recs).find(r=>r.paidGrantDate===g.value&&r.paidBalanceEnd)||pick;
+            if(withEnd.paidBalanceEnd)e.value=withEnd.paidBalanceEnd;
+            else if(g.value){const d=new Date(g.value+'T00:00:00');d.setFullYear(d.getFullYear()+1);d.setDate(d.getDate()-1);e.value=d.toISOString().slice(0,10);}
+        }
+        try{window.renderPaidLedger?.();}catch(_){}
+    }
+    const oldLoad=window.leaveLoadRecord;
+    window.leaveLoadRecord=function(){const r=oldLoad.apply(this,arguments);try{fillDates();}catch(_){}return r;};
+    ['leaveStaffName','leavePeriodStart','leavePeriodEnd'].forEach(id=>$(id)?.addEventListener('change',()=>setTimeout(fillDates,60)));
+    document.addEventListener('click',ev=>{if(ev.target.closest&&ev.target.closest('#leavePrevBtn,#leaveNextBtn,#leaveApplyCarryBtn,#leavePeriodTable'))setTimeout(fillDates,120);},true);
+    setTimeout(fillDates,700);
+
+    // ---- 有給管理Excel: 付与日以降の取得履歴を期間をまたいで出力 ----
+    const mmdd=d=>`${d.slice(5,7)}/${d.slice(8,10)}`;
+    function entryText(e){
+        const d=mmdd(e.date);
+        if(e.holidayWorkId!=null)return `${d}（休日出勤・有給1日取得）`;
+        if(e.kind==='time'){
+            const segs=(typeof leaveSegmentsFromEntry==='function'?leaveSegmentsFromEntry(e):(Array.isArray(e.segments)?e.segments:[]))||[];
+            const t=segs.filter(x=>x&&x.start&&x.end).map(x=>`${x.start}-${x.end}`).join(' / ');
+            return `${d}　${Number(e.units||0)}単位${t?'　'+t:''}`;
+        }
+        if(e.kind==='half')return `${d}（半日）`;
+        return d;
+    }
+    const availUnits=r=>r.paidTotalAdjustUnits!=null?Number(r.paidTotalAdjustUnits)
+        :r.paidTotalAdjust!=null?Math.round(Number(r.paidTotalAdjust)*12)
+        :(Number(r.paidGrant||0)+Number(r.paidCarryIn||0))*12;
+    const fmtUnits=u=>{u=Math.max(0,u);const d=Math.floor(u/12),m=u%12;return m&&d?`${d}日 + ${m}単位`:m?`${m}単位`:`${d}日`;};
+    function buildReport(){
+        const staff=($('leaveStaffName').value||'').trim();
+        const grant=$('paidGrantDate').value||'',end=$('paidBalanceEnd').value||'';
+        const recs=staffRecs();
+        const seen=new Set(),list=[];
+        recs.forEach(r=>(r.entries||[]).forEach(e=>{
+            if(e.type!=='paid')return;
+            if(grant&&e.date<grant)return;          // 付与日より前は載せない
+            if(end&&e.date>end)return;
+            const k=`${e.date}|${e.kind}|${e.half||''}|${e.units}|${e.id||''}`;
+            if(seen.has(k))return;seen.add(k);list.push(e);
+        }));
+        list.sort((a,b)=>a.date.localeCompare(b.date));
+        // 付与時点の有給合計：付与日が同じ記録のうち最も古い期間（なければ表示中の期間）
+        const cur=leaveCurrent();
+        const holder=(grant?recs.filter(r=>r.paidGrantDate===grant).sort((a,b)=>a.start.localeCompare(b.start))[0]:null)||cur||recs[0];
+        const available=holder?availUnits(holder):0;
+        const used=list.reduce((n,e)=>n+Number(e.units||0),0);
+        const start=grant||(list[0]?.date)||$('leavePeriodStart').value;
+        const stop=end||(list.length?list[list.length-1].date:$('leavePeriodEnd').value);
+        return {kind:'paid',staff,start,end:stop,values:[staff,list.map(entryText).join('\r\n'),fmtUnits(used),fmtUnits(available-used)]};
+    }
+    document.addEventListener('click',async ev=>{
+        const b=ev.target.closest&&ev.target.closest('#paidPrintExcelBtn');
+        if(!b)return;
+        ev.preventDefault();ev.stopImmediatePropagation();
+        if(!staffKey()){alert('CSV出力するスタッフ名を入力してください。');$('leaveStaffName').focus();return;}
+        const label=b.textContent;b.disabled=true;b.textContent='Excelを作成中…';
+        try{await v56ExportExcel([buildReport()],v56Template);}
+        catch(e){alert('Excel出力に失敗しました：'+e.message);}
+        finally{b.disabled=false;b.textContent=label;}
+    },true);
+    window.v63FillDates=fillDates;
+})();
+</script>
+
 </body>
 </html>
