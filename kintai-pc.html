@@ -847,15 +847,26 @@ async function v56ExportExcel(reports,template){
         const bodyKind=shift||report.kind==='ot'||report.kind==='pt'; // headers+bodyを直接1行=1レコードで描画する種別
         const headers=bodyKind?report.headers:paidOnly?['名前','有給取得日・時間休','有給取得量','有給残数','主任印','事務長印','確認印']:['名前','公休日','前月繰越\n前借','公休合計','公休消化','当月繰越\n前借','有給取得日・時間休','有給取得量'];
         const widths=shift?headers.map((h,i)=>i===0?12:({'公休数':6,'有給数':9,'出勤回数':6,'平日残業':8,'半日残業':8,'休日出勤':8,'深夜残業':8,'休日8h超':8,'パート労働+残業':11,'特記事項':15}[h]||4))
-            :report.kind==='ot'?[14,10,9,9,11,9,11,18,18,18,18]
+            :report.kind==='ot'?[14,10,9,9,11,9,11,24,24,24,24]
             :report.kind==='pt'?[14,10,16,10,10,10,40]
             :paidOnly?[14,34,11,11,9,9,9]:[12,32,11,11,10,11,36,14];
         const endCol=column(headers.length-1);
         const pub=bodyKind?[]:report.values[1].split(/\r?\n/),paid=bodyKind?[]:paidOnly?[]:report.values[6].split(/\r?\n/);
         const footer=paidOnly?['※時間休は年間60単位（1単位＝40分）までしか使えません。','＊公休数が残っている時点での有休使用はできません。','＊半日取得は0.5日、単位取得は1単位（1日＝12単位）と表記する。']:(report.kind==='ot'||report.kind==='pt')?(report.footer||[]):[]; // 期間集計などの全幅メモ行（最終ページのみ表示）
-        const count=bodyKind?report.body.length:Math.max(1,pub.length,paid.length),pages=Math.ceil(count/18);
+        const count=bodyKind?report.body.length:Math.max(1,pub.length,paid.length);
+        // 残業・パートデータは、なるべく1枚に収める。収まらない場合は日付順のまま、行数が均等になるよう最小限の枚数に分ける。
+        const bounds=[0];
+        if(report.kind==='ot'||report.kind==='pt'){
+            const hs=report.body.map(vals=>Math.max(22,Math.max(1,...vals.map((v,ci)=>Math.ceil(dispWidth(v)/1.2/Math.max(4,widths[ci]))))*13+5));
+            const total=hs.reduce((a,b)=>a+b,0),overhead=28+22+32+footer.length*20,CAP=840;
+            const np=Math.max(1,Math.ceil((total+overhead)/CAP)),per=total/np;
+            let acc=0;
+            hs.forEach((h,i)=>{acc+=h;if(bounds.length<np&&acc>=per*bounds.length&&i+1<count)bounds.push(i+1);});
+            bounds.push(count);
+        }else{for(let i=18;i<count;i+=18)bounds.push(i);bounds.push(count);}
+        const pages=bounds.length-1;
         for(let page=0;page<pages;page++){
-            const n=Math.min(18,count-page*18);
+            const n=bounds[page+1]-bounds[page];
             const footerLines=(page===pages-1)?footer.length:0;
             const last=n+3+(shift?3:0)+footerLines;
             const name=report.start.replace(/-/g,'')+(pages>1?'_'+(page+1):'');
@@ -867,7 +878,7 @@ async function v56ExportExcel(reports,template){
             xml+=`<row r="2" ht="22" customHeight="1">${cell('A',2,report.start+'〜'+report.end+(pages>1?`　${page+1}/${pages}（集計値は期間全体）`:''),1)}</row>`;
             xml+=`<row r="3" ht="32" customHeight="1">${headers.map((x,i)=>cell(column(i),3,x,9)).join('')}</row>`;
             for(let i=0;i<n;i++){
-                const row=i+4,idx=page*18+i;
+                const row=i+4,idx=bounds[page]+i;
                 const vals=bodyKind?report.body[idx]:(paidOnly?[...report.values,'','','']:report.values).map((v,c)=>c===1?pub[idx]||'':!paidOnly&&c===6?paid[idx]||'':i===0?v:'');
                 // Long descriptions get enough height; do not force oversized Excel rows.
                 const lines=shift?4
@@ -886,7 +897,7 @@ async function v56ExportExcel(reports,template){
             if(shift)for(let j=0;j<3;j++)xml+=`<mergeCell ref="A${n+4+j}:${endCol}${n+4+j}"/>`;
             else if(footerLines)for(let j=0;j<footerLines;j++)xml+=`<mergeCell ref="A${n+4+j}:${endCol}${n+4+j}"/>`;
             if(n>1&&!bodyKind)(paidOnly?['A','C','D','E','F','G']:['A','C','D','E','F','H']).forEach(c=>{xml+=`<mergeCell ref="${c}4:${c}${n+3}"/>`;});
-            xml+='</mergeCells><printOptions horizontalCentered="1"/><pageMargins left="0.28" right="0.28" top="0.35" bottom="0.35" header="0.15" footer="0.15"/><pageSetup paperSize="9" orientation="'+(paidOnly?'portrait':'landscape')+'" fitToWidth="1" fitToHeight="'+(shift?1:0)+'"/><headerFooter><oddFooter>&amp;R&amp;P / &amp;N</oddFooter></headerFooter></worksheet>';
+            xml+='</mergeCells><printOptions horizontalCentered="1"/><pageMargins left="0.28" right="0.28" top="0.35" bottom="0.35" header="0.15" footer="0.15"/><pageSetup paperSize="9" orientation="'+(paidOnly?'portrait':'landscape')+'" fitToWidth="1" fitToHeight="'+((shift||report.kind==='ot'||report.kind==='pt')?1:0)+'"/><headerFooter><oddFooter>&amp;R&amp;P / &amp;N</oddFooter></headerFooter></worksheet>';
             sheets.push({name,xml,last,endCol});
         }
     }
@@ -4457,6 +4468,8 @@ function v52SavePartFromForm(rec){
             return null;
         }
 
+        // 残業の日付順（同日は名前順）に並べる
+        selected.sort((a,b)=>String(a.date||"").localeCompare(String(b.date||""))||String(a.staffName||"").localeCompare(String(b.staffName||""),"ja"));
         const regular = selected.filter(r=>r.workType!=="parttime");
         const part = selected.filter(r=>r.workType==="parttime");
 
