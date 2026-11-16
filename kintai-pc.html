@@ -7359,5 +7359,221 @@ function v52SavePartFromForm(rec){
 })();
 </script>
 
+<script id="v62-year-leave-plan">
+/* v62: 年間・期間別の公休数設定 と 年間公休管理表(A4横)のExcel出力 */
+(function(){
+    const PLAN_KEY='leave_period_year_plan_v1'; // leave_period_ で始まるキーはバックアップ対象
+    const DEFAULT_ROWS=[4,12,10,8,13,9,12,11,9,13,11,9,5]; // 2026年度の公休管理表の例
+    const $=id=>document.getElementById(id);
+    const p2=n=>String(n).padStart(2,'0');
+    const ds=(y,m,d)=>`${y}-${p2(m)}-${p2(d)}`;
+    const fyOfDate=s=>{const [y,m]=s.split('-').map(Number);return m>=4?y:y-1;};
+    // 年度の13区分（4/1～4/15、4/16～5/15、…、3/16～3/31）
+    function fyRows(fy){
+        const rows=[[ds(fy,4,1),ds(fy,4,15)]];
+        for(let i=0;i<11;i++){
+            const m=4+i, y=fy+(m>12?1:0), mm=((m-1)%12)+1;
+            const ny=fy+(m+1>12?1:0), nm=((m)%12)+1;
+            rows.push([ds(y,mm,16),ds(ny,nm,15)]);
+        }
+        rows.push([ds(fy+1,3,16),ds(fy+1,3,31)]);
+        return rows;
+    }
+    const lab=r=>`${Number(r[0].slice(5,7))}/${Number(r[0].slice(8))}～${Number(r[1].slice(5,7))}/${Number(r[1].slice(8))}`;
+    function loadAll(){try{const o=JSON.parse(localStorage.getItem(PLAN_KEY)||'{}');return o&&typeof o==='object'?o:{};}catch(e){return {};}}
+    function getPlan(fy){
+        const all=loadAll(), p=all[fy];
+        if(p&&Array.isArray(p.rows)&&p.rows.length===13)return {total:Number(p.total)||0,rows:p.rows.map(Number)};
+        const prev=Object.keys(all).map(Number).filter(y=>y<fy).sort((a,b)=>b-a)[0];
+        const src=prev!=null?all[prev]:null;
+        const rows=src&&Array.isArray(src.rows)&&src.rows.length===13?src.rows.map(Number):DEFAULT_ROWS.slice();
+        return {total:rows.reduce((a,b)=>a+b,0),rows};
+    }
+    function savePlan(fy,plan){const all=loadAll();all[fy]=plan;try{localStorage.setItem(PLAN_KEY,JSON.stringify(all));}catch(e){}}
+    // 期間[start,end]に完全に含まれる区分の公休数の合計（該当なしならnull＝従来どおり）
+    window.v62PlannedBase=function(start,end){
+        if(!start||!end)return null;
+        const y=fyOfDate(start);let sum=0,hit=false;
+        for(const fy of [y-1,y,y+1]){
+            const plan=getPlan(fy);
+            fyRows(fy).forEach((r,i)=>{if(r[0]>=start&&r[1]<=end){sum+=plan.rows[i];hit=true;}});
+        }
+        return hit?sum:null;
+    };
+
+    // ---- 新しい期間の基本公休数は設定値から決める ----
+    const oldData=window.leaveRecordData;
+    window.leaveRecordData=function(){
+        const d=oldData.apply(this,arguments);
+        try{if(!leaveCurrent()){const b=window.v62PlannedBase(d.start,d.end);if(b!=null)d.baseDays=b;}}catch(e){}
+        return d;
+    };
+    const oldLoad=window.leaveLoadRecord;
+    window.leaveLoadRecord=function(){
+        const r=oldLoad.apply(this,arguments);
+        try{if(!leaveCurrent()){const b=window.v62PlannedBase($('leavePeriodStart').value,$('leavePeriodEnd').value);if(b!=null){$('leaveBaseDays').value=b;leaveRenderAll(false);}}}catch(e){}
+        return r;
+    };
+
+    // ---- 設定パネル ----
+    const fmt=n=>Number.isInteger(n)?String(n):n.toFixed(1);
+    function buildPanel(){
+        const host=$('leaveStaffName')?.closest('.p-6');
+        if(!host||$('v62Panel'))return;
+        const box=document.createElement('details');box.id='v62Panel';
+        box.style.cssText='border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc;padding:10px 14px';
+        box.innerHTML=`<summary style="cursor:pointer;font-weight:700;font-size:14px">⚙️ 年間・期間別の公休数の設定（年度 4/1〜3/31）</summary>
+        <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:12px;align-items:end">
+          <label style="font-size:12px;font-weight:600">年度<br><input id="v62Fy" type="number" style="width:90px;border:1px solid #cbd5e1;border-radius:8px;padding:6px"> 年度</label>
+          <label style="font-size:12px;font-weight:600">年間公休数<br><input id="v62Total" type="number" step="0.5" min="0" style="width:90px;border:1px solid #cbd5e1;border-radius:8px;padding:6px"> 日</label>
+          <div id="v62Sum" style="font-size:12px;font-weight:700"></div>
+        </div>
+        <div id="v62Rows" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:10px"></div>
+        <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px">
+          <button type="button" id="v62Save" style="background:#2563eb;color:#fff;font-weight:700;border-radius:8px;padding:8px 14px;font-size:12px">設定を保存して全期間に反映</button>
+          <button type="button" id="v62Xlsx" style="background:#047857;color:#fff;font-weight:700;border-radius:8px;padding:8px 14px;font-size:12px">A4印刷用Excel（年間公休管理表）</button>
+        </div>
+        <p style="font-size:11px;color:#64748b;margin-top:8px">各期間の公休数は全スタッフ共通です。期間（16日〜翌15日）に4/1〜4/15や3/16〜3/31が含まれる場合は、その区分の合計を基本公休数にします（例：3/16〜4/15＝5＋4）。個別の期間は、従来どおり「基本公休数」欄でも変更できます。</p>`;
+        host.insertBefore(box,host.firstChild);
+        $('v62Fy').value=fyOfDate($('leavePeriodStart').value||new Date().toISOString().slice(0,10));
+        $('v62Fy').addEventListener('change',render);
+        $('v62Total').addEventListener('input',sumCheck);
+        $('v62Save').addEventListener('click',onSave);
+        $('v62Xlsx').addEventListener('click',exportXlsx);
+        render();
+    }
+    function render(){
+        const fy=Number($('v62Fy').value);if(!fy)return;
+        const plan=getPlan(fy),rows=fyRows(fy),wrap=$('v62Rows');wrap.innerHTML='';
+        rows.forEach((r,i)=>{
+            const l=document.createElement('label');l.style.cssText='font-size:11px;font-weight:600';
+            l.innerHTML=`${lab(r)}<br>`;
+            const inp=document.createElement('input');inp.type='number';inp.step='0.5';inp.min='0';inp.value=plan.rows[i];inp.dataset.i=i;
+            inp.style.cssText='width:80px;border:1px solid #cbd5e1;border-radius:8px;padding:5px';inp.addEventListener('input',sumCheck);
+            l.appendChild(inp);l.append(' 日');wrap.appendChild(l);
+        });
+        $('v62Total').value=plan.total;sumCheck();
+    }
+    const readRows=()=>[...$('v62Rows').querySelectorAll('input')].map(i=>Number(i.value)||0);
+    function sumCheck(){
+        const s=readRows().reduce((a,b)=>a+b,0),t=Number($('v62Total').value)||0,el=$('v62Sum');
+        el.textContent=s===t?`期間別の合計 ${fmt(s)}日 ＝ 年間公休数 ✓`:`⚠️ 期間別の合計 ${fmt(s)}日 ／ 年間公休数 ${fmt(t)}日（差 ${fmt(s-t)}日）`;
+        el.style.color=s===t?'#047857':'#b45309';
+    }
+    function currentPlanFromPanel(){return {total:Number($('v62Total').value)||0,rows:readRows()};}
+    function onSave(){
+        const fy=Number($('v62Fy').value);if(!fy){alert('年度を入力してください。');return;}
+        const plan=currentPlanFromPanel(),sum=plan.rows.reduce((a,b)=>a+b,0);
+        if(sum!==plan.total&&!confirm(`期間別の合計（${fmt(sum)}日）が年間公休数（${fmt(plan.total)}日）と一致しません。このまま保存しますか？`))return;
+        savePlan(fy,plan);
+        let n=0;
+        try{
+            leaveRecords.forEach(r=>{const b=window.v62PlannedBase(r.start,r.end);if(b!=null&&Number(r.baseDays)!==b){r.baseDays=b;n++;}});
+            if(n)localStorage.setItem(LEAVE_STORAGE_KEY,JSON.stringify(leaveRecords));
+            leaveLoadRecord();
+        }catch(e){}
+        alert(`${fy}年度の公休数を保存しました。（既存の期間データ ${n}件の基本公休数を更新）`);
+    }
+
+    // ---- 年間公休管理表(A4横) ----
+    async function exportXlsx(){
+        const staff=($('leaveStaffName').value||'').trim();
+        if(!staff){alert('スタッフ名を入力してください。');$('leaveStaffName').focus();return;}
+        if(typeof JSZip==='undefined'||typeof v56Template==='undefined')return alert('Excelファイルを作る部品が読み込まれていません。');
+        const fy=Number($('v62Fy').value);if(!fy){alert('年度を入力してください。');return;}
+        const plan=currentPlanFromPanel();savePlan(fy,plan);
+        const btn=$('v62Xlsx'),old=btn.textContent;btn.disabled=true;btn.textContent='Excelを作成中…';
+        try{await buildXlsx(staff,fy,plan);}catch(e){alert('Excel出力に失敗しました：'+e.message);}
+        finally{btn.disabled=false;btn.textContent=old;}
+    }
+    function entryCell(e){
+        const m=Number(e.date.slice(5,7)),d=Number(e.date.slice(8)),b=`${m}/${d}`;
+        if(e.type==='public'){
+            if(e.kind==='half')return b+(e.half==='am'?'AM':'PM');
+            if(e.kind==='time')return `${b}\n${Number(e.units||0)}単位`;
+            return b;
+        }
+        if(e.kind==='half')return b+'有\n'+(e.half==='am'?'AM':e.half==='pm'?'PM':'半日');
+        if(e.kind==='time')return `${b}有\n${Number(e.units||0)}単位`;
+        return b+'有';
+    }
+    async function buildXlsx(staff,fy,plan){
+        const esc=s=>String(s??'').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
+        const key=v52Norm(staff);
+        const recs=leaveRecords.filter(r=>v52Norm(r.staffName)===key);
+        const seen=new Set(),entries=[];
+        recs.forEach(r=>(r.entries||[]).forEach(e=>{const k=`${e.date}|${e.type}|${e.kind}|${e.half||''}|${e.id||''}`;if(!seen.has(k)){seen.add(k);entries.push(e);}}));
+        const rows=fyRows(fy);
+        const isPart=typeof v52IsPart==='function'&&v52IsPart(staff);
+        let cap=18;
+        const data=rows.map((r,i)=>{
+            const es=entries.filter(e=>e.date>=r[0]&&e.date<=r[1]&&(e.type==='public'||e.type==='paid'))
+                .sort((a,b)=>(a.type===b.type?0:a.type==='public'?-1:1)||a.date.localeCompare(b.date));
+            cap=Math.max(cap,es.length);
+            return {range:r,plan:plan.rows[i],es};
+        });
+        let carry=0,totalUsed=0;
+        data.forEach(x=>{
+            const rec=recs.find(r=>r.start===x.range[0]);
+            const c=rec&&Number.isFinite(Number(rec.carryIn))?Number(rec.carryIn):carry;
+            x.carry=c;x.total=x.plan+c;
+            x.used=x.es.filter(e=>e.type==='public').reduce((s,e)=>s+Number(e.units||0),0);
+            x.out=x.total-x.used;carry=x.out;totalUsed+=x.used;
+            const pu=x.es.filter(e=>e.type==='paid').reduce((s,e)=>s+Number(e.units||0),0);
+            x.paid=pu?`${Math.floor(pu/12)}日${pu%12?(pu%12)+'単位':''}`:'0';
+        });
+        // スタイル追加（黒罫線・中央揃え・太字見出し）
+        const zip=await JSZip.loadAsync(v56Template,{base64:true});
+        let st=await zip.file('xl/styles.xml').async('string');
+        st=st.replace('<x:fonts count="4">','<x:fonts count="6">').replace('</x:fonts>','<x:font><x:b /><x:sz val="16" /><x:name val="Yu Gothic" /></x:font><x:font><x:b /><x:sz val="12" /><x:name val="Yu Gothic" /></x:font></x:fonts>')
+            .replace('<x:borders count="2">','<x:borders count="3">').replace('</x:borders>','<x:border><x:left style="thin"><x:color rgb="FF000000" /></x:left><x:right style="thin"><x:color rgb="FF000000" /></x:right><x:top style="thin"><x:color rgb="FF000000" /></x:top><x:bottom style="thin"><x:color rgb="FF000000" /></x:bottom></x:border></x:borders>')
+            .replace('<x:cellXfs count="11">','<x:cellXfs count="17">')
+            .replace('</x:cellXfs>',[
+                '<x:xf numFmtId="0" fontId="1" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><x:alignment horizontal="center" vertical="center" wrapText="1" /></x:xf>',   // 11 本文
+                '<x:xf numFmtId="0" fontId="3" fillId="2" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><x:alignment horizontal="center" vertical="center" wrapText="1" /></x:xf>', // 12 見出し
+                '<x:xf numFmtId="0" fontId="3" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><x:alignment horizontal="center" vertical="center" wrapText="1" /></x:xf>',   // 13 太字
+                '<x:xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><x:alignment horizontal="center" vertical="center" /></x:xf>',                               // 14 タイトル
+                '<x:xf numFmtId="0" fontId="5" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><x:alignment horizontal="right" vertical="center" /></x:xf>',                               // 15 氏名
+                '<x:xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><x:alignment horizontal="left" vertical="center" /></x:xf>'                                  // 16 注記
+            ].join('')+'</x:cellXfs>');
+        zip.file('xl/styles.xml',st);
+        const col=n=>{let s='';for(n++;n;n=Math.floor((n-1)/26))s=String.fromCharCode(65+(n-1)%26)+s;return s;};
+        const cell=(c,r,v,s)=>`<c r="${col(c)}${r}" s="${s}" t="inlineStr"><is><t xml:space="preserve">${esc(v)}</t></is></c>`;
+        const blank=(c,r,s)=>`<c r="${col(c)}${r}" s="${s}"/>`;
+        const SUMC=['公休数','前月繰越\n前借','公休合計','公休消化','当月繰越\n前借','有休取得','主任印','確認'];
+        const ncol=1+cap+SUMC.length,last=ncol-1,lastRow=3+rows.length+1;
+        const num=n=>fmt(n);
+        let xml=`<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:${col(last)}${lastRow+3}"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews><sheetFormatPr defaultRowHeight="20"/><cols><col min="1" max="1" width="11.5" customWidth="1"/>`;
+        xml+=`<col min="2" max="${1+cap}" width="6.6" customWidth="1"/>`;
+        [6.5,7.5,6.5,6.5,7.5,8.5,7,7].forEach((w,i)=>{xml+=`<col min="${2+cap+i}" max="${2+cap+i}" width="${w}" customWidth="1"/>`;});
+        xml+='</cols><sheetData>';
+        xml+=`<row r="1" ht="30" customHeight="1">${cell(0,1,`${fy}年度　公休管理表`,14)}</row>`;
+        xml+=`<row r="2" ht="24" customHeight="1">${cell(0,2,`《${isPart?'PT':'正社員'}》　氏名　${staff}`,15)}</row>`;
+        xml+=`<row r="3" ht="34" customHeight="1">${cell(0,3,'日数',12)}${Array.from({length:cap},(_,i)=>cell(1+i,3,String(i+1),12)).join('')}${SUMC.map((t,i)=>cell(1+cap+i,3,t,12)).join('')}</row>`;
+        data.forEach((x,ri)=>{
+            const r=4+ri;
+            xml+=`<row r="${r}" ht="33" customHeight="1">${cell(0,r,lab(x.range),13)}`;
+            for(let i=0;i<cap;i++)xml+=x.es[i]?cell(1+i,r,entryCell(x.es[i]),11):blank(1+i,r,11);
+            [num(x.plan),num(x.carry),num(x.total),num(x.used),num(x.out),x.paid].forEach((v,i)=>{xml+=cell(1+cap+i,r,v,i===0?13:11);});
+            xml+=blank(1+cap+6,r,11)+blank(1+cap+7,r,11)+'</row>';
+        });
+        const tr=lastRow;
+        xml+=`<row r="${tr}" ht="26" customHeight="1">${cell(0,tr,'合計',13)}${Array.from({length:cap},(_,i)=>blank(1+i,tr,11)).join('')}${cell(1+cap,tr,num(plan.rows.reduce((a,b)=>a+b,0)),13)}${blank(1+cap+1,tr,11)}${blank(1+cap+2,tr,11)}${cell(1+cap+3,tr,num(totalUsed),13)}${blank(1+cap+4,tr,11)}${blank(1+cap+5,tr,11)}${blank(1+cap+6,tr,11)}${blank(1+cap+7,tr,11)}</row>`;
+        const notes=['＊公休数が残っている時点での有休使用はできません。（日付に「有」が付いているものは有休取得日）','＊その月の公休数を上回ったり下回ったりしたら、なるべく翌月に調整します。','＊AM／PM＝半日休、「n単位」＝時間休（有休1日＝12単位）。'];
+        notes.forEach((t,j)=>{xml+=`<row r="${tr+1+j}" ht="18" customHeight="1">${cell(0,tr+1+j,t,16)}</row>`;});
+        xml+=`</sheetData><mergeCells><mergeCell ref="A1:${col(last)}1"/><mergeCell ref="A2:${col(last)}2"/>${notes.map((_,j)=>`<mergeCell ref="A${tr+1+j}:${col(last)}${tr+1+j}"/>`).join('')}</mergeCells><printOptions horizontalCentered="1"/><pageMargins left="0.3" right="0.3" top="0.4" bottom="0.4" header="0.2" footer="0.2"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="1"/></worksheet>`;
+        const ns='http://schemas.openxmlformats.org/spreadsheetml/2006/main',relns='http://schemas.openxmlformats.org/package/2006/relationships';
+        const name='公休管理表';
+        zip.file('xl/workbook.xml',`<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="${ns}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets><sheet name="${name}" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">'${name}'!$A$1:$${col(last)}$${tr+3}</definedName></definedNames></workbook>`);
+        zip.file('xl/_rels/workbook.xml.rels',`<?xml version="1.0"?><Relationships xmlns="${relns}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="styles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
+        zip.file('xl/worksheets/sheet1.xml',xml);
+        const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+        const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`年間公休管理表_${staff}_${fy}年度.xlsx`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }
+    window.v62FyRows=fyRows;window.v62GetPlan=getPlan;window.v62BuildXlsx=buildXlsx;
+    buildPanel();
+})();
+</script>
+
 </body>
 </html>
