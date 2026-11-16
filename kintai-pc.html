@@ -845,14 +845,14 @@ async function v56ExportExcel(reports,template){
     for(const report of reports){
         const shift=report.kind==='shift',paidOnly=report.kind==='paid';
         const bodyKind=shift||report.kind==='ot'||report.kind==='pt'; // headers+bodyを直接1行=1レコードで描画する種別
-        const headers=bodyKind?report.headers:paidOnly?['名前','有給取得日・時間休','有給取得量','有給残数']:['名前','公休日','前月繰越\n前借','公休合計','公休消化','当月繰越\n前借','有給取得日・時間休','有給取得量'];
-        const widths=shift?[12,...Array(headers.length-5).fill(5),6,9,6,15]
+        const headers=bodyKind?report.headers:paidOnly?['名前','有給取得日・時間休','有給取得量','有給残数','主任印','事務長印','確認印']:['名前','公休日','前月繰越\n前借','公休合計','公休消化','当月繰越\n前借','有給取得日・時間休','有給取得量'];
+        const widths=shift?[12,...Array(headers.length-6).fill(5),6,9,6,9,15]
             :report.kind==='ot'?[14,10,9,9,11,9,11,18,18,18,18]
             :report.kind==='pt'?[14,10,16,10,10,10,40]
-            :paidOnly?[16,64,20,20]:[12,32,11,11,10,11,36,14];
+            :paidOnly?[16,50,16,16,11,11,11]:[12,32,11,11,10,11,36,14];
         const endCol=column(headers.length-1);
         const pub=bodyKind?[]:report.values[1].split(/\r?\n/),paid=bodyKind?[]:paidOnly?[]:report.values[6].split(/\r?\n/);
-        const footer=(report.kind==='ot'||report.kind==='pt')?(report.footer||[]):[]; // 期間集計などの全幅メモ行（最終ページのみ表示）
+        const footer=paidOnly?['※時間休は年間60単位（1単位＝40分）までしか使えません。','＊公休数が残っている時点での有休使用はできません。','＊半日取得は0.5日、単位取得は1単位（1日＝12単位）と表記する。']:(report.kind==='ot'||report.kind==='pt')?(report.footer||[]):[]; // 期間集計などの全幅メモ行（最終ページのみ表示）
         const count=bodyKind?report.body.length:Math.max(1,pub.length,paid.length),pages=Math.ceil(count/18);
         for(let page=0;page<pages;page++){
             const n=Math.min(18,count-page*18);
@@ -868,7 +868,7 @@ async function v56ExportExcel(reports,template){
             xml+=`<row r="3" ht="32" customHeight="1">${headers.map((x,i)=>cell(column(i),3,x,9)).join('')}</row>`;
             for(let i=0;i<n;i++){
                 const row=i+4,idx=page*18+i;
-                const vals=bodyKind?report.body[idx]:report.values.map((v,c)=>c===1?pub[idx]||'':!paidOnly&&c===6?paid[idx]||'':i===0?v:'');
+                const vals=bodyKind?report.body[idx]:(paidOnly?[...report.values,'','','']:report.values).map((v,c)=>c===1?pub[idx]||'':!paidOnly&&c===6?paid[idx]||'':i===0?v:'');
                 // Long descriptions get enough height; do not force oversized Excel rows.
                 const lines=shift?4
                     :(report.kind==='ot'||report.kind==='pt')?Math.max(1,...vals.map((v,ci)=>Math.ceil(dispWidth(v)/Math.max(4,widths[ci]))))
@@ -885,8 +885,8 @@ async function v56ExportExcel(reports,template){
             xml+=`<mergeCell ref="A1:${endCol}1"/><mergeCell ref="A2:${endCol}2"/>`;
             if(shift)for(let j=0;j<3;j++)xml+=`<mergeCell ref="A${n+4+j}:${endCol}${n+4+j}"/>`;
             else if(footerLines)for(let j=0;j<footerLines;j++)xml+=`<mergeCell ref="A${n+4+j}:${endCol}${n+4+j}"/>`;
-            if(n>1&&!bodyKind)(paidOnly?['A','C','D']:['A','C','D','E','F','H']).forEach(c=>{xml+=`<mergeCell ref="${c}4:${c}${last}"/>`;});
-            xml+='</mergeCells><printOptions horizontalCentered="1"/><pageMargins left="0.28" right="0.28" top="0.35" bottom="0.35" header="0.15" footer="0.15"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/><headerFooter><oddFooter>&amp;R&amp;P / &amp;N</oddFooter></headerFooter></worksheet>';
+            if(n>1&&!bodyKind)(paidOnly?['A','C','D','E','F','G']:['A','C','D','E','F','H']).forEach(c=>{xml+=`<mergeCell ref="${c}4:${c}${n+3}"/>`;});
+            xml+='</mergeCells><printOptions horizontalCentered="1"/><pageMargins left="0.28" right="0.28" top="0.35" bottom="0.35" header="0.15" footer="0.15"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="${shift?1:0}"/><headerFooter><oddFooter>&amp;R&amp;P / &amp;N</oddFooter></headerFooter></worksheet>';
             sheets.push({name,xml,last,endCol});
         }
     }
@@ -1119,7 +1119,7 @@ function v49ShiftCsv(mode,start,staffName){
         const rows=records.filter(r=>r.start<=p.end&&r.end>=p.start&&norm(r.staffName));
         const names=[...new Set(rows.map(r=>norm(r.staffName)))].sort((a,b)=>a.localeCompare(b,'ja'));
         out.push(line(['シフト表',p.start+'〜'+p.end]));
-        out.push(line(['名前',...dates.map(d=>Number(d.slice(5,7))+'/'+Number(d.slice(8,10))),'公休数','有給数','出勤回数','特記事項']));
+        out.push(line(['名前',...dates.map(d=>Number(d.slice(5,7))+'/'+Number(d.slice(8,10))),'公休数','有給数','出勤回数','残業時間','特記事項']));
         for(const name of names){
             const own=rows.filter(r=>norm(r.staffName)===name).sort((a,b)=>(Date.parse(b.updatedAt)||0)-(Date.parse(a.updatedAt)||0));
             let publicDays=0,paidUnits=0,attendance=0,unknown=0;
@@ -1141,10 +1141,15 @@ function v49ShiftCsv(mode,start,staffName){
                 const absence=units+(half?6:0); if(absence<12&&!v52IsPart(name))attendance++;
                 return (half?(half.half==='pm'?'PM':'AM')+(half.type==='paid'?'有':''):'')+(units?'×'+units:'');
             });
-            out.push(line([name,...shifts,publicDays,`${Math.floor(paidUnits/12)}日${paidUnits%12?'＋'+paidUnits%12+'単位':''}`,attendance,unknown?`未登録${unknown}日（集計対象外）`:'']));
+            // 期間内の残業時間（残業申請のある日の合計）
+            const otMin=(typeof overtimeRecords!=='undefined'&&Array.isArray(overtimeRecords)?overtimeRecords:[])
+                .filter(r=>norm(r.staffName)===name&&r.date>=p.start&&r.date<=p.end&&(typeof window.v31HasOvertimeApplication!=='function'||window.v31HasOvertimeApplication(r)))
+                .reduce((n,r)=>n+(r.workType==='parttime'?Math.max(0,Math.round(Number(r.partTimeOverMin)||0)):Math.max(0,Number(r.totalNormalMin)||0)+Math.max(0,Number(r.totalNightMin)||0)),0);
+            const otText=otMin?`${Math.floor(otMin/60)}:${String(otMin%60).padStart(2,'0')}`:'0:00';
+            out.push(line([name,...shifts,publicDays,`${Math.floor(paidUnits/12)}日${paidUnits%12?'＋'+paidUnits%12+'単位':''}`,attendance,otText,unknown?`未登録${unknown}日（集計対象外）`:'']));
         }
         out.push(line(['凡例','空欄＝正社員は出勤予定・パートは出勤指定なし／パート＝パート出勤／×＝公休／AM・PM＝公休半日／有＝有給1日／AM有・PM有＝有給半日／×n＝時間休n単位／特＝特別休暇／休出＝休日出勤']));
-        out.push(line(['集計方法','公休数・有給数は取得量。半日は0.5日、有給1日＝12単位。出勤回数は予定回数（半日・時間休・休日出勤も1回）。休日出勤で選択した休暇の取得量も含む。']));
+        out.push(line(['集計方法','公休数・有給数は取得量。半日は0.5日、有給1日＝12単位。出勤回数は予定回数（半日・時間休・休日出勤も1回）。残業時間は期間内の残業申請の合計（時:分）。休日出勤で選択した休暇の取得量も含む。']));
         out.push('');
     }
     return out.join('\r\n');
@@ -7476,12 +7481,13 @@ function v52SavePartFromForm(rec){
     }
 
     // ---- 年間公休管理表(A4横) ----
-    async function exportXlsx(){
+    async function exportXlsx(fyArg){
         const staff=($('leaveStaffName').value||'').trim();
         if(!staff){alert('スタッフ名を入力してください。');$('leaveStaffName').focus();return;}
         if(typeof JSZip==='undefined'||typeof v56Template==='undefined')return alert('Excelファイルを作る部品が読み込まれていません。');
-        const fy=Number($('v62Fy').value);if(!fy){alert('年度を入力してください。');return;}
-        const plan=currentPlanFromPanel();savePlan(fy,plan);
+        const fy=typeof fyArg==='number'?fyArg:Number($('v62Fy').value);if(!fy){alert('年度を入力してください。');return;}
+        const plan=(fy===Number($('v62Fy').value))?currentPlanFromPanel():getPlan(fy);
+        if(fy===Number($('v62Fy').value))savePlan(fy,plan);
         const btn=$('v62Xlsx'),old=btn.textContent;btn.disabled=true;btn.textContent='Excelを作成中…';
         try{await buildXlsx(staff,fy,plan);}catch(e){alert('Excel出力に失敗しました：'+e.message);}
         finally{btn.disabled=false;btn.textContent=old;}
@@ -7514,6 +7520,9 @@ function v52SavePartFromForm(rec){
         });
         let carry=0,totalUsed=0;
         data.forEach(x=>{
+            // 登録済みの期間がない区分は、公休数だけ表示して集計欄は空欄にする
+            x.has=recs.some(r=>r.start<=x.range[1]&&r.end>=x.range[0]);
+            if(!x.has)return;
             const rec=recs.find(r=>r.start===x.range[0]);
             const c=rec&&Number.isFinite(Number(rec.carryIn))?Number(rec.carryIn):carry;
             x.carry=c;x.total=x.plan+c;
@@ -7554,7 +7563,7 @@ function v52SavePartFromForm(rec){
             const r=4+ri;
             xml+=`<row r="${r}" ht="33" customHeight="1">${cell(0,r,lab(x.range),13)}`;
             for(let i=0;i<cap;i++)xml+=x.es[i]?cell(1+i,r,entryCell(x.es[i]),11):blank(1+i,r,11);
-            [num(x.plan),num(x.carry),num(x.total),num(x.used),num(x.out),x.paid].forEach((v,i)=>{xml+=cell(1+cap+i,r,v,i===0?13:11);});
+            (x.has?[num(x.plan),num(x.carry),num(x.total),num(x.used),num(x.out),x.paid]:[num(x.plan),'','','','','']).forEach((v,i)=>{xml+=cell(1+cap+i,r,v,i===0?13:11);});
             xml+=blank(1+cap+6,r,11)+blank(1+cap+7,r,11)+'</row>';
         });
         const tr=lastRow;
@@ -7570,6 +7579,23 @@ function v52SavePartFromForm(rec){
         const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
         const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`年間公休管理表_${staff}_${fy}年度.xlsx`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
     }
+    // 「A4印刷用Excel（公休・有給）」ボタンは、表示中の期間が属する年度の年間公休管理表を出力する
+    document.addEventListener('click',ev=>{
+        const b=ev.target.closest&&ev.target.closest('#leavePrintExcelBtn');
+        if(!b)return;
+        ev.preventDefault();ev.stopImmediatePropagation();
+        const st=$('leavePeriodStart').value;
+        exportXlsx(st?fyOfDate(st):undefined);
+    },true);
+    // 時間休の上限の注意書き
+    (function(){
+        const anchor=$('leaveCsvBtn')?.closest('.flex-col');
+        if(!anchor||$('v62PaidNote'))return;
+        const n=document.createElement('p');n.id='v62PaidNote';
+        n.style.cssText='font-size:12px;font-weight:700;color:#b45309';
+        n.textContent='⚠️ 時間休は年間60単位（1単位＝40分）までしか使えません。';
+        anchor.insertAdjacentElement('afterend',n);
+    })();
     window.v62FyRows=fyRows;window.v62GetPlan=getPlan;window.v62BuildXlsx=buildXlsx;
     buildPanel();
 })();
