@@ -849,7 +849,7 @@ async function v56ExportExcel(reports,template){
         const widths=shift?[12,...Array(headers.length-11).fill(5),6,9,6,8,8,8,8,8,11,15]
             :report.kind==='ot'?[14,10,9,9,11,9,11,18,18,18,18]
             :report.kind==='pt'?[14,10,16,10,10,10,40]
-            :paidOnly?[16,50,16,16,11,11,11]:[12,32,11,11,10,11,36,14];
+            :paidOnly?[14,34,11,11,9,9,9]:[12,32,11,11,10,11,36,14];
         const endCol=column(headers.length-1);
         const pub=bodyKind?[]:report.values[1].split(/\r?\n/),paid=bodyKind?[]:paidOnly?[]:report.values[6].split(/\r?\n/);
         const footer=paidOnly?['※時間休は年間60単位（1単位＝40分）までしか使えません。','＊公休数が残っている時点での有休使用はできません。','＊半日取得は0.5日、単位取得は1単位（1日＝12単位）と表記する。']:(report.kind==='ot'||report.kind==='pt')?(report.footer||[]):[]; // 期間集計などの全幅メモ行（最終ページのみ表示）
@@ -872,7 +872,7 @@ async function v56ExportExcel(reports,template){
                 // Long descriptions get enough height; do not force oversized Excel rows.
                 const lines=shift?4
                     :(report.kind==='ot'||report.kind==='pt')?Math.max(1,...vals.map((v,ci)=>Math.ceil(dispWidth(v)/Math.max(4,widths[ci]))))
-                    :Math.max(1,Math.ceil((vals[1]||'').length/(paidOnly?48:24)),Math.ceil((vals[6]||'').length/28));
+                    :Math.max(1,Math.ceil((vals[1]||'').length/(paidOnly?32:24)),Math.ceil((vals[6]||'').length/28));
                 xml+=`<row r="${row}" ht="${Math.max(22,lines*13+5)}" customHeight="1">${vals.map((v,c)=>cell(column(c),row,v)).join('')}</row>`;
             }
             if(shift){
@@ -886,7 +886,7 @@ async function v56ExportExcel(reports,template){
             if(shift)for(let j=0;j<3;j++)xml+=`<mergeCell ref="A${n+4+j}:${endCol}${n+4+j}"/>`;
             else if(footerLines)for(let j=0;j<footerLines;j++)xml+=`<mergeCell ref="A${n+4+j}:${endCol}${n+4+j}"/>`;
             if(n>1&&!bodyKind)(paidOnly?['A','C','D','E','F','G']:['A','C','D','E','F','H']).forEach(c=>{xml+=`<mergeCell ref="${c}4:${c}${n+3}"/>`;});
-            xml+='</mergeCells><printOptions horizontalCentered="1"/><pageMargins left="0.28" right="0.28" top="0.35" bottom="0.35" header="0.15" footer="0.15"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="${shift?1:0}"/><headerFooter><oddFooter>&amp;R&amp;P / &amp;N</oddFooter></headerFooter></worksheet>';
+            xml+='</mergeCells><printOptions horizontalCentered="1"/><pageMargins left="0.28" right="0.28" top="0.35" bottom="0.35" header="0.15" footer="0.15"/><pageSetup paperSize="9" orientation="'+(paidOnly?'portrait':'landscape')+'" fitToWidth="1" fitToHeight="'+(shift?1:0)+'"/><headerFooter><oddFooter>&amp;R&amp;P / &amp;N</oddFooter></headerFooter></worksheet>';
             sheets.push({name,xml,last,endCol});
         }
     }
