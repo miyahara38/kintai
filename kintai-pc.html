@@ -7667,11 +7667,48 @@ function v52SavePartFromForm(rec){
         }
         try{window.renderPaidLedger?.();}catch(_){}
     }
+    // ---- 次の期間を開いたとき、有給の残数を自動で引き継ぐ ----
+    // 前の期間の「有給合計 − 取得」を、新しい期間の有給合計（前年度繰越）にする。
+    // 新しい期間に有給の数字が未入力（0）のときだけ行い、入力済みの値は変えない。
+    const paidKey=e=>`${e.date}|${e.kind}|${e.half||''}|${e.units}|${e.id||''}`;
+    function inheritPaid(){
+        if(!staffKey())return false;
+        const st=$('leavePeriodStart').value,en=$('leavePeriodEnd').value;if(!st||!en)return false;
+        let cur=leaveCurrent();
+        if(cur&&(availUnits(cur)>0||cur.paidInherited||Number(cur.paidGrant)>0||Number(cur.paidCarryIn)>0))return false;
+        const recs=staffRecs();
+        const prevs=recs.filter(r=>r.start<st&&r!==cur&&availUnits(r)>0).sort((a,b)=>b.start.localeCompare(a.start));
+        const prev=prevs[0];if(!prev)return false;
+        // 前の期間の開始から今の期間の前日までの有給取得を差し引く
+        const seen=new Set();let used=0;
+        recs.filter(r=>r.start>=prev.start&&r.start<st).forEach(r=>(r.entries||[]).forEach(e=>{
+            if(e.type!=='paid'||e.date<prev.start||e.date>=st)return;
+            const k=paidKey(e);if(seen.has(k))return;seen.add(k);used+=Number(e.units||0);}));
+        const remain=availUnits(prev)-used;if(remain<=0)return false;
+        if(!cur)cur=leaveEnsureRecord();if(!cur)return false;
+        cur.paidGrant=0;cur.paidCarryIn=remain/12;cur.paidTotalAdjustUnits=remain;cur.paidTotalAdjust=remain/12;cur.paidInherited=true;
+        try{localStorage.setItem(LEAVE_STORAGE_KEY,JSON.stringify(leaveRecords));}catch(_){}
+        return true;
+    }
+    function showVisible(){ // 画面の入力欄にも反映
+        const cur=leaveCurrent();if(!cur)return;
+        const u=Math.round(availUnits(cur)),set=(id,v)=>{const el=$(id);if(el)el.value=String(v);};
+        set('paidGrant',0);set('paidCarryIn',cur.paidCarryIn);
+        set('paidCarryInDays',Math.floor(u/12));set('paidCarryInUnits',u%12);
+        const adj=$('paidTotalAdjust');if(adj){adj.value=String(u/12);adj.dataset.totalUnits=String(u);}
+        set('paidTotalAdjustDays',Math.floor(u/12));set('paidTotalAdjustUnits',u%12);
+        const pv=$('paidTotalAdjustPreview');if(pv)pv.textContent=`${Math.floor(u/12)}日 ${u%12}単位`;
+        const cp=$('paidCarryInPreview');if(cp)cp.textContent=`${Math.floor(u/12)}日 ${u%12}単位`;
+        try{window.renderPaidLedger?.();}catch(_){}
+        try{leaveRenderAll(false);}catch(_){}
+    }
     const oldLoad=window.leaveLoadRecord;
-    window.leaveLoadRecord=function(){const r=oldLoad.apply(this,arguments);try{fillDates();}catch(_){}return r;};
-    ['leaveStaffName','leavePeriodStart','leavePeriodEnd'].forEach(id=>$(id)?.addEventListener('change',()=>setTimeout(fillDates,60)));
-    document.addEventListener('click',ev=>{if(ev.target.closest&&ev.target.closest('#leavePrevBtn,#leaveNextBtn,#leaveApplyCarryBtn,#leavePeriodTable'))setTimeout(fillDates,120);},true);
-    setTimeout(fillDates,700);
+    function refresh(){try{if(inheritPaid()){oldLoad();showVisible();}fillDates();}catch(_){}}
+    window.leaveLoadRecord=function(){const r=oldLoad.apply(this,arguments);refresh();return r;};
+    ['leaveStaffName','leavePeriodStart','leavePeriodEnd'].forEach(id=>$(id)?.addEventListener('change',()=>setTimeout(refresh,150)));
+    document.addEventListener('click',ev=>{if(ev.target.closest&&ev.target.closest('#leavePrevBtn,#leaveNextBtn,#leaveApplyCarryBtn,#leavePeriodTable'))setTimeout(refresh,200);},true);
+    setTimeout(refresh,700);
+    window.v63InheritPaid=refresh;
 
     // ---- 有給管理Excel: 付与日以降の取得履歴を期間をまたいで出力 ----
     const mmdd=d=>`${d.slice(5,7)}/${d.slice(8,10)}`;
