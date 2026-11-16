@@ -4638,9 +4638,10 @@ function v52SavePartFromForm(rec){
     });
 
     // v34: A4印刷用にきれいに整形されたExcel出力（正社員・残業データ／パート勤務データ）。
-    excelBtn.addEventListener("click", ()=>{
+    // 残業データ（正社員・パート）の出力内容を作る。Excel出力とまとめて印刷で共用する。
+    window.v34BuildReports = function(){
         const v34Sel = v34CollectSelection();
-        if(!v34Sel) return;
+        if(!v34Sel) return null;
         const {regular, part, period, filter} = v34Sel;
 
         const otBody = regular.map(r=>{
@@ -4688,7 +4689,7 @@ function v52SavePartFromForm(rec){
 
         if(!otBody.length && !ptBody.length){
             alert("出力できる勤怠・残業データがありません。");
-            return;
+            return null;
         }
 
         // 期間集計（正社員・残業）
@@ -4743,6 +4744,11 @@ function v52SavePartFromForm(rec){
             ]
         });
 
+        return reports;
+    };
+    excelBtn.addEventListener("click", ()=>{
+        const reports = window.v34BuildReports();
+        if(!reports) return;
         const label=excelBtn.textContent;
         excelBtn.disabled=true;
         excelBtn.textContent="Excelを作成中…";
@@ -5107,7 +5113,7 @@ function v52SavePartFromForm(rec){
         btn.insertAdjacentElement('afterend',excelBtn);
         excelBtn.addEventListener('click',()=>{btn.dataset.printExcel='1';btn.click();});
         excelBtn.parentElement.classList.add('flex-wrap');
-        for(const [kind,label,id] of [['paid','A4印刷用Excel（有給管理）','paidPrintExcelBtn'],['shift','A4印刷用Excel（シフト表）','shiftPrintExcelBtn']]){
+        for(const [kind,label,id] of [['paid','A4印刷用Excel（有給管理）','paidPrintExcelBtn'],['shift','シフト表をデータ保存（Excel）','shiftPrintExcelBtn']]){
             const b=document.createElement('button');b.type='button';b.id=id;b.className=excelBtn.className;b.textContent=label;
             excelBtn.parentElement.appendChild(b);b.addEventListener('click',()=>{btn.dataset.printExcel=kind;btn.click();});
         }
@@ -7533,8 +7539,8 @@ function v52SavePartFromForm(rec){
         if(e.kind==='time')return `${b}有\n${Number(e.units||0)}単位`;
         return b+'有';
     }
-    async function buildXlsx(staff,fy,plan){
-        const esc=s=>String(s??'').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
+    // 年間公休管理表の中身（Excelとまとめて印刷で共用）
+    function annualModel(staff,fy,plan){
         const key=v52Norm(staff);
         const recs=leaveRecords.filter(r=>v52Norm(r.staffName)===key);
         const seen=new Set(),entries=[];
@@ -7561,6 +7567,12 @@ function v52SavePartFromForm(rec){
             const pu=x.es.filter(e=>e.type==='paid').reduce((s,e)=>s+Number(e.units||0),0);
             x.paid=pu?`${Math.floor(pu/12)}日${pu%12?(pu%12)+'単位':''}`:'0';
         });
+        return {data,cap,isPart,totalUsed,rows};
+    }
+    async function buildXlsx(staff,fy,plan){
+        const esc=s=>String(s??'').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
+        const {data,cap,isPart,totalUsed}=annualModel(staff,fy,plan);
+        const rows=fyRows(fy);
         // スタイル追加（黒罫線・中央揃え・太字見出し）
         const zip=await JSZip.loadAsync(v56Template,{base64:true});
         let st=await zip.file('xl/styles.xml').async('string');
@@ -7626,7 +7638,7 @@ function v52SavePartFromForm(rec){
         n.textContent='⚠️ 時間休は年間60単位（1単位＝40分）までしか使えません。';
         anchor.insertAdjacentElement('afterend',n);
     })();
-    window.v62FyRows=fyRows;window.v62GetPlan=getPlan;window.v62BuildXlsx=buildXlsx;
+    window.v62PlanFor=fy=>(fy===Number($('v62Fy').value))?currentPlanFromPanel():getPlan(fy);window.v62FyRows=fyRows;window.v62AnnualModel=annualModel;window.v62EntryCell=entryCell;window.v62FyOf=fyOfDate;window.v62GetPlan=getPlan;window.v62BuildXlsx=buildXlsx;
     buildPanel();
 })();
 </script>
@@ -7710,7 +7722,118 @@ function v52SavePartFromForm(rec){
         catch(e){alert('Excel出力に失敗しました：'+e.message);}
         finally{b.disabled=false;b.textContent=label;}
     },true);
-    window.v63FillDates=fillDates;
+    window.v63FillDates=fillDates;window.v63BuildPaidReport=buildReport;
+})();
+</script>
+
+<script id="v64-batch-print">
+/* v64: 「まとめて印刷」— 残業データ・年間公休管理表（公休・有給）・有給管理表を、まとめて印刷する */
+(function(){
+    const $=id=>document.getElementById(id);
+    const h=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    const br=s=>h(s).replace(/\r?\n/g,'<br>');
+    const fmt=n=>Number.isInteger(n)?String(n):n.toFixed(1);
+
+    // ---- 残業データ（正社員・パート）----
+    function otPages(){
+        const quiet=window.alert;let msg='';window.alert=m=>{msg=String(m);};
+        let reports=null;try{reports=window.v34BuildReports();}finally{window.alert=quiet;}
+        if(!reports)return {html:'',skipped:'残業データ（'+(msg||'出力できるデータがありません')+'）'};
+        const widths={ot:[24,20,17,17,17,17,17,37,37,37,37],pt:[24,20,34,22,22,22,133]};
+        let html='';
+        reports.forEach(r=>{
+            const title=r.kind==='ot'?'正社員・残業データ':'パート勤務データ';
+            const n=r.body.length,np=Math.max(1,Math.ceil(n/20)),bounds=[0];
+            for(let k=1;k<np;k++)bounds.push(Math.round(n*k/np));bounds.push(n);
+            for(let pg=0;pg<np;pg++){
+                const rows=r.body.slice(bounds[pg],bounds[pg+1]),w=widths[r.kind],sum=w.reduce((a,b)=>a+b,0);
+                html+=`<div class="pg land"><h1>${title}</h1><div class="sub">${h(r.staff)}　${h(r.start)}〜${h(r.end)}${np>1?`　${pg+1}/${np}`:''}</div>
+                <table class="t ot"><colgroup>${w.map(x=>`<col style="width:${(x/sum*100).toFixed(2)}%">`).join('')}</colgroup>
+                <tr>${r.headers.map(x=>`<th>${br(x)}</th>`).join('')}</tr>
+                ${rows.map(row=>`<tr>${row.map(c=>`<td>${br(c)}</td>`).join('')}</tr>`).join('')}</table>
+                ${pg===np-1?(r.footer||[]).map((t,j)=>`<div class="ft${j?'':' b'}">${h(t)}</div>`).join(''):''}</div>`;
+            }
+        });
+        return {html};
+    }
+
+    // ---- 年間公休管理表（公休・有給）----
+    function annualPage(staff){
+        const st=$('leavePeriodStart').value;const fy=st?window.v62FyOf(st):null;
+        if(!fy)return {html:'',skipped:'公休・有給（期間が未設定です）'};
+        const plan=window.v62PlanFor(fy);const m=window.v62AnnualModel(staff,fy,plan);
+        const SUMC=['公休数','前月繰越<br>前借','公休合計','公休消化','当月繰越<br>前借','有休取得','主任印','確認'];
+        const lab=r=>`${Number(r[0].slice(5,7))}/${Number(r[0].slice(8))}～${Number(r[1].slice(5,7))}/${Number(r[1].slice(8))}`;
+        const rows=window.v62FyRows(fy);
+        const dateW=Math.max(8,158/m.cap);
+        let t=`<tr><th>日数</th>${Array.from({length:m.cap},(_,i)=>`<th>${i+1}</th>`).join('')}${SUMC.map(x=>`<th>${x}</th>`).join('')}</tr>`;
+        m.data.forEach((x,i)=>{
+            const cells=Array.from({length:m.cap},(_,k)=>`<td>${x.es[k]?br(window.v62EntryCell(x.es[k])):''}</td>`).join('');
+            const sums=(x.has?[fmt(x.plan),fmt(x.carry),fmt(x.total),fmt(x.used),fmt(x.out),x.paid]:[fmt(x.plan),'','','','','']);
+            t+=`<tr><th class="l">${lab(rows[i])}</th>${cells}${sums.map((v,k)=>`<td${k===0?' class="b"':''}>${h(v)}</td>`).join('')}<td></td><td></td></tr>`;
+        });
+        const planSum=plan.rows.reduce((a,b)=>a+b,0);
+        t+=`<tr><th class="l">合計</th>${'<td></td>'.repeat(m.cap)}<td class="b">${fmt(planSum)}</td><td></td><td></td><td class="b">${fmt(m.totalUsed)}</td><td></td><td></td><td></td><td></td></tr>`;
+        return {html:`<div class="pg land"><h1 class="c">${fy}年度　公休管理表</h1><div class="sub r">《${m.isPart?'PT':'正社員'}》　氏名　${h(staff)}</div>
+          <table class="t an"><colgroup><col style="width:24mm">${('<col style="width:'+dateW.toFixed(1)+'mm">').repeat(m.cap)}${[10,13,10,10,13,14,12,12].map(x=>`<col style="width:${x}mm">`).join('')}</colgroup>${t}</table>
+          <div class="ft">＊公休数が残っている時点での有休使用はできません。（日付に「有」が付いているものは有休取得日）</div>
+          <div class="ft">＊その月の公休数を上回ったり下回ったりしたら、なるべく翌月に調整します。</div>
+          <div class="ft">＊AM／PM＝半日休、「n単位」＝時間休（有休1日＝12単位）。</div></div>`};
+    }
+
+    // ---- 有給管理表（縦）----
+    function paidPage(staff){
+        const r=window.v63BuildPaidReport();const v=r.values;
+        const lines=String(v[1]||'').split(/\r?\n/).filter(Boolean);
+        return {html:`<div class="pg port"><h1>有給管理表</h1><div class="sub">${h(r.start)}〜${h(r.end)}</div>
+          <table class="t pd"><colgroup><col style="width:22mm"><col><col style="width:26mm"><col style="width:26mm"><col style="width:20mm"><col style="width:20mm"><col style="width:20mm"></colgroup>
+          <tr><th>名前</th><th>有給取得日・時間休</th><th>有給取得量</th><th>有給残数</th><th>主任印</th><th>事務長印</th><th>確認印</th></tr>
+          <tr class="tall"><td>${h(v[0])}</td><td class="lft">${lines.map(h).join('<br>')||'&nbsp;'}</td><td>${h(v[2])}</td><td>${h(v[3])}</td><td></td><td></td><td></td></tr></table>
+          <div class="ft b">※時間休は年間60単位（1単位＝40分）までしか使えません。</div>
+          <div class="ft">＊公休数が残っている時点での有休使用はできません。</div>
+          <div class="ft">＊半日取得は0.5日、単位取得は1単位（1日＝12単位）と表記する。</div></div>`};
+    }
+
+    const CSS=`@page{margin:10mm}@page land{size:A4 landscape;margin:10mm}@page port{size:A4 portrait;margin:12mm}
+    *{box-sizing:border-box}body{margin:0;font-family:"Yu Gothic","Meiryo","Noto Sans CJK JP","IPAPGothic",sans-serif;color:#000}
+    .pg{break-after:page;page-break-after:always}.pg:last-child{break-after:auto;page-break-after:auto}.land{page:land}.port{page:port}
+    h1{font-size:15pt;margin:0 0 2mm;color:#17365d}h1.c{text-align:center}.sub{font-size:9pt;margin:0 0 2mm}.sub.r{text-align:right;font-size:11pt;font-weight:700}
+    table.t{border-collapse:collapse;width:100%;table-layout:fixed}.t th,.t td{border:.3mm solid #000;text-align:center;vertical-align:middle;padding:.6mm .8mm;word-break:break-all;overflow-wrap:anywhere}
+    .t th{background:#e8eff7;font-weight:700}.b{font-weight:700}
+    .ot{font-size:7.5pt}.ot td{text-align:left;height:7mm}.ot th{font-size:7pt}
+    .an{font-size:7pt}.an td{white-space:nowrap;padding:.3mm}.an tr td,.an tr th.l{height:9.5mm}.an th{font-size:7pt}.an th.l{font-size:8pt}
+    .pd{font-size:9.5pt}.pd .tall td{height:150mm;vertical-align:top}.pd .lft{text-align:left}
+    .ft{font-size:8pt;margin-top:1.5mm}`;
+
+    async function printAll(){
+        const staff=($('leaveStaffName').value||'').trim();
+        const parts=[],skipped=[];
+        const ot=otPages();if(ot.html)parts.push(ot.html);else skipped.push(ot.skipped);
+        if(staff){
+            try{const a=annualPage(staff);if(a.html)parts.push(a.html);else skipped.push(a.skipped);}catch(e){skipped.push('公休・有給（'+e.message+'）');}
+            try{parts.push(paidPage(staff).html);}catch(e){skipped.push('有給管理（'+e.message+'）');}
+        }else skipped.push('公休・有給／有給管理（スタッフ名が未入力です）');
+        if(!parts.length){alert('印刷できるデータがありません。\n'+skipped.join('\n'));return;}
+        if(skipped.length&&!confirm('次のものは印刷しません。このまま印刷しますか？\n・'+skipped.join('\n・')))return;
+        const f=document.createElement('iframe');f.style.cssText='position:fixed;right:0;bottom:0;width:0;height:0;border:0';document.body.appendChild(f);
+        const d=f.contentDocument;d.open();d.write(`<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>勤怠データ（まとめて印刷）</title><style>${CSS}</style></head><body>${parts.join('')}</body></html>`);d.close();
+        const cleanup=()=>setTimeout(()=>f.remove(),1000);
+        setTimeout(()=>{try{f.contentWindow.focus();f.contentWindow.addEventListener('afterprint',cleanup);f.contentWindow.print();}catch(e){alert('印刷を開始できませんでした：'+e.message);f.remove();}},300);
+        window.v64LastHtml=d.documentElement.outerHTML;
+    }
+
+    // ---- ボタン（公休・有給管理のボタン列の下に、1行で追加）----
+    const row=$('leaveCsvBtn')?.closest('.flex-col');
+    if(row&&!$('batchPrintBtn')){
+        const wrap=document.createElement('div');wrap.style.cssText='display:flex;justify-content:flex-end;margin-top:8px';
+        const b=document.createElement('button');b.type='button';b.id='batchPrintBtn';
+        b.className='bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg px-3 py-2 text-sm';
+        b.style.cssText='padding:12px 22px;border-radius:10px';
+        b.textContent='🖨️ まとめて印刷（残業データ・公休有給・有給管理）';
+        wrap.appendChild(b);row.insertAdjacentElement('afterend',wrap);
+        b.addEventListener('click',()=>{printAll().catch(e=>alert('印刷の準備に失敗しました：'+e.message));});
+    }
+    window.v64BatchPrint=printAll;
 })();
 </script>
 
