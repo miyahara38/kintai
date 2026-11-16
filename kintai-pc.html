@@ -854,14 +854,12 @@ async function v56ExportExcel(reports,template){
         const pub=bodyKind?[]:report.values[1].split(/\r?\n/),paid=bodyKind?[]:paidOnly?[]:report.values[6].split(/\r?\n/);
         const footer=paidOnly?['※時間休は年間60単位（1単位＝40分）までしか使えません。','＊公休数が残っている時点での有休使用はできません。','＊半日取得は0.5日、単位取得は1単位（1日＝12単位）と表記する。']:(report.kind==='ot'||report.kind==='pt')?(report.footer||[]):[]; // 期間集計などの全幅メモ行（最終ページのみ表示）
         const count=bodyKind?report.body.length:Math.max(1,pub.length,paid.length);
-        // 残業・パートデータは、なるべく1枚に収める。収まらない場合は日付順のまま、行数が均等になるよう最小限の枚数に分ける。
+        // 残業・パートデータの改ページ（下記）
         const bounds=[0];
         if(report.kind==='ot'||report.kind==='pt'){
-            const hs=report.body.map(vals=>Math.max(22,Math.max(1,...vals.map((v,ci)=>Math.ceil(dispWidth(v)/1.2/Math.max(4,widths[ci]))))*13+5));
-            const total=hs.reduce((a,b)=>a+b,0),overhead=28+22+32+footer.length*20,CAP=840;
-            const np=Math.max(1,Math.ceil((total+overhead)/CAP)),per=total/np;
-            let acc=0;
-            hs.forEach((h,i)=>{acc+=h;if(bounds.length<np&&acc>=per*bounds.length&&i+1<count)bounds.push(i+1);});
+            // 20行まで1枚、21行以上は2枚（41行以上は20行ごとに増やす）。日付順のまま行数が均等になるよう分ける。
+            const np=Math.max(1,Math.ceil(count/20));
+            for(let k=1;k<np;k++)bounds.push(Math.round(count*k/np));
             bounds.push(count);
         }else{for(let i=18;i<count;i+=18)bounds.push(i);bounds.push(count);}
         const pages=bounds.length-1;
