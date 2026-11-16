@@ -846,7 +846,7 @@ async function v56ExportExcel(reports,template){
         const shift=report.kind==='shift',paidOnly=report.kind==='paid';
         const bodyKind=shift||report.kind==='ot'||report.kind==='pt'; // headers+bodyを直接1行=1レコードで描画する種別
         const headers=bodyKind?report.headers:paidOnly?['名前','有給取得日・時間休','有給取得量','有給残数','主任印','事務長印','確認印']:['名前','公休日','前月繰越\n前借','公休合計','公休消化','当月繰越\n前借','有給取得日・時間休','有給取得量'];
-        const widths=shift?[12,...Array(headers.length-11).fill(5),6,9,6,8,8,8,8,8,11,15]
+        const widths=shift?headers.map((h,i)=>i===0?12:({'公休数':6,'有給数':9,'出勤回数':6,'平日残業':8,'半日残業':8,'休日出勤':8,'深夜残業':8,'休日8h超':8,'パート労働+残業':11,'特記事項':15}[h]||4))
             :report.kind==='ot'?[14,10,9,9,11,9,11,18,18,18,18]
             :report.kind==='pt'?[14,10,16,10,10,10,40]
             :paidOnly?[14,34,11,11,9,9,9]:[12,32,11,11,10,11,36,14];
@@ -1119,7 +1119,8 @@ function v49ShiftCsv(mode,start,staffName){
         const rows=records.filter(r=>r.start<=p.end&&r.end>=p.start&&norm(r.staffName));
         const names=[...new Set(rows.map(r=>norm(r.staffName)))].sort((a,b)=>a.localeCompare(b,'ja'));
         out.push(line(['シフト表',p.start+'〜'+p.end]));
-        out.push(line(['名前',...dates.map(d=>Number(d.slice(5,7))+'/'+Number(d.slice(8,10))),'公休数','有給数','出勤回数','平日残業','半日残業','休日出勤','深夜残業','休日8h超','パート労働+残業','特記事項']));
+        const headRow=(['名前',...dates.map(d=>String(Number(d.slice(8,10)))),'公休数','有給数','出勤回数','平日残業','半日残業','休日出勤','深夜残業','休日8h超','パート労働+残業','特記事項']);
+        const bodyRows=[];
         for(const name of names){
             const own=rows.filter(r=>norm(r.staffName)===name).sort((a,b)=>(Date.parse(b.updatedAt)||0)-(Date.parse(a.updatedAt)||0));
             let publicDays=0,paidUnits=0,attendance=0,unknown=0;
@@ -1158,8 +1159,14 @@ function v49ShiftCsv(mode,start,staffName){
                 });
             const hm=m=>m>0?`${Math.floor(m/60)}:${String(Math.round(m%60)).padStart(2,'0')}`:'－';
             const otCells=isPt?['－','－','－','－','－',hm(ptTotal)]:[hm(nrm),hm(hf),hm(hol),hm(ngt),hm(ov8),'－'];
-            out.push(line([name,...shifts,publicDays,`${Math.floor(paidUnits/12)}日${paidUnits%12?'＋'+paidUnits%12+'単位':''}`,attendance,...otCells,unknown?`未登録${unknown}日（集計対象外）`:'']));
+            bodyRows.push(([name,...shifts,publicDays,`${Math.floor(paidUnits/12)}日${paidUnits%12?'＋'+paidUnits%12+'単位':''}`,attendance,...otCells,unknown?`未登録${unknown}日（集計対象外）`:'']));
         }
+        // 内訳の列は、全員が0時間なら列ごと省く（平日残業は常に表示）
+        const optional=headRow.map((h,i)=>['半日残業','休日出勤','深夜残業','休日8h超','パート労働+残業'].includes(h)?i:-1).filter(i=>i>=0);
+        const drop=new Set(optional.filter(i=>bodyRows.every(r=>r[i]==='－')));
+        const keep=a=>a.filter((_,i)=>!drop.has(i));
+        out.push(line(keep(headRow)));
+        bodyRows.forEach(r=>out.push(line(keep(r))));
         out.push(line(['凡例','空欄＝正社員は出勤予定・パートは出勤指定なし／パート＝パート出勤／×＝公休／AM・PM＝公休半日／有＝有給1日／AM有・PM有＝有給半日／×n＝時間休n単位／特＝特別休暇／休出＝休日出勤']));
         out.push(line(['集計方法','公休数・有給数は取得量。半日は0.5日、有給1日＝12単位。出勤回数は予定回数（半日・時間休・休日出勤も1回）。平日残業・半日残業・休日出勤・深夜残業・休日8h超は期間内の残業申請の合計（時:分）。パートは労働時間と残業申請の合計時間（時:分）。休日出勤で選択した休暇の取得量も含む。']));
         out.push('');
