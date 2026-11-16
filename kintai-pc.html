@@ -7525,7 +7525,7 @@ function v52SavePartFromForm(rec){
         const plan=(fy===Number($('v62Fy').value))?currentPlanFromPanel():getPlan(fy);
         if(fy===Number($('v62Fy').value))savePlan(fy,plan);
         const btn=$('v62Xlsx'),old=btn.textContent;btn.disabled=true;btn.textContent='Excelを作成中…';
-        try{await buildXlsx(staff,fy,plan);}catch(e){alert('Excel出力に失敗しました：'+e.message);}
+        try{await buildXlsx(staff,fy,plan,$('leavePeriodEnd').value||'');}catch(e){alert('Excel出力に失敗しました：'+e.message);}
         finally{btn.disabled=false;btn.textContent=old;}
     }
     function entryCell(e){
@@ -7540,7 +7540,9 @@ function v52SavePartFromForm(rec){
         return b+'有';
     }
     // 年間公休管理表の中身（Excelとまとめて印刷で共用）
-    function annualModel(staff,fy,plan){
+    // cutoff：この日までを反映する（表示中の期間の終了日）。それ以降の取得日・期間は載せない。
+    function annualModel(staff,fy,plan,cutoff){
+        const cut=cutoff||'9999-12-31';
         const key=v52Norm(staff);
         const recs=leaveRecords.filter(r=>v52Norm(r.staffName)===key);
         const seen=new Set(),entries=[];
@@ -7549,7 +7551,7 @@ function v52SavePartFromForm(rec){
         const isPart=typeof v52IsPart==='function'&&v52IsPart(staff);
         let cap=18;
         const data=rows.map((r,i)=>{
-            const es=entries.filter(e=>e.date>=r[0]&&e.date<=r[1]&&(e.type==='public'||e.type==='paid'))
+            const es=entries.filter(e=>e.date>=r[0]&&e.date<=r[1]&&e.date<=cut&&(e.type==='public'||e.type==='paid'))
                 .sort((a,b)=>(a.type===b.type?0:a.type==='public'?-1:1)||a.date.localeCompare(b.date));
             cap=Math.max(cap,es.length);
             return {range:r,plan:plan.rows[i],es};
@@ -7557,7 +7559,7 @@ function v52SavePartFromForm(rec){
         let carry=0,totalUsed=0;
         data.forEach(x=>{
             // 登録済みの期間がない区分は、公休数だけ表示して集計欄は空欄にする
-            x.has=recs.some(r=>r.start<=x.range[1]&&r.end>=x.range[0]);
+            x.has=x.range[0]<=cut&&recs.some(r=>r.start<=x.range[1]&&r.end>=x.range[0]);
             if(!x.has)return;
             const rec=recs.find(r=>r.start===x.range[0]);
             const c=rec&&Number.isFinite(Number(rec.carryIn))?Number(rec.carryIn):carry;
@@ -7569,9 +7571,9 @@ function v52SavePartFromForm(rec){
         });
         return {data,cap,isPart,totalUsed,rows};
     }
-    async function buildXlsx(staff,fy,plan){
+    async function buildXlsx(staff,fy,plan,cutoff){
         const esc=s=>String(s??'').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
-        const {data,cap,isPart,totalUsed}=annualModel(staff,fy,plan);
+        const {data,cap,isPart,totalUsed}=annualModel(staff,fy,plan,cutoff);
         const rows=fyRows(fy);
         // スタイル追加（黒罫線・中央揃え・太字見出し）
         const zip=await JSZip.loadAsync(v56Template,{base64:true});
@@ -7805,7 +7807,7 @@ function v52SavePartFromForm(rec){
     function annualPage(staff){
         const st=$('leavePeriodStart').value;const fy=st?window.v62FyOf(st):null;
         if(!fy)return {html:'',skipped:'公休・有給（期間が未設定です）'};
-        const plan=window.v62PlanFor(fy);const m=window.v62AnnualModel(staff,fy,plan);
+        const plan=window.v62PlanFor(fy);const m=window.v62AnnualModel(staff,fy,plan,$('leavePeriodEnd').value||'');
         const SUMC=['公休数','前月繰越<br>前借','公休合計','公休消化','当月繰越<br>前借','有休取得','主任印','確認'];
         const lab=r=>`${Number(r[0].slice(5,7))}/${Number(r[0].slice(8))}～${Number(r[1].slice(5,7))}/${Number(r[1].slice(8))}`;
         const rows=window.v62FyRows(fy);
