@@ -1443,7 +1443,26 @@ function v52SavePartFromForm(rec){
         const btnSubmit = document.getElementById("btnSubmit");
         const btnCancelEdit = document.getElementById("btnCancelEdit");
 
-        dateInput.value = new Date().toISOString().split('T')[0];
+        // 端末のローカル日付(toISOStringはUTCのため日本の午前9時前に前日になってしまう)
+        function localTodayStr() {
+            const n = new Date();
+            return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+        }
+        let autoDateValue = localTodayStr();
+        dateInput.value = autoDateValue;
+        // 画面を開いたまま日をまたいだ場合、自動入力のままなら当日に更新する
+        function refreshAutoDate() {
+            const t = localTodayStr();
+            if (t === autoDateValue) return;
+            if (!editingIdInput.value && dateInput.value === autoDateValue) {
+                dateInput.value = t;
+                dateInput.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+            autoDateValue = t;
+        }
+        document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAutoDate(); });
+        window.addEventListener("focus", refreshAutoDate);
+        window.addEventListener("pageshow", refreshAutoDate);
 
         function timeToMinutes(timeStr) {
             if (!timeStr) return 0;
