@@ -1,59 +1,24 @@
-// 出退勤・残業管理 オフライン用 Service Worker
-// アプリを更新したときは CACHE_VERSION の数字を上げてください。
-const CACHE_VERSION = "v1";
-const CACHE_NAME = `kintai-${CACHE_VERSION}`;
-const APP_FILES = [
-    "./",
-    "./index.html",
-    "./manifest.webmanifest",
-    "./icon-192.png",
-    "./icon-512.png",
-    "./apple-touch-icon.png"
-];
-const NETWORK_TIMEOUT_MS = 3000;
-
-self.addEventListener("install", event => {
-    event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_FILES)));
-    self.skipWaiting();
+/* 出退勤打刻: オフラインで起動するためのキャッシュ。
+ * 打刻データは localStorage にあり、ここでは扱わない(更新しても消えない)。 */
+var CACHE = 'ipad-punch-v2';
+var ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-512.png'];
+self.addEventListener('install', function (e) {
+  e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ASSETS); }).then(function () { return self.skipWaiting(); }));
 });
-
-self.addEventListener("activate", event => {
-    event.waitUntil(
-        caches.keys()
-            .then(keys => Promise.all(keys.filter(k => k.startsWith("kintai-") && k !== CACHE_NAME).map(k => caches.delete(k))))
-            .then(() => self.clients.claim())
-    );
+self.addEventListener('activate', function (e) {
+  e.waitUntil(caches.keys().then(function (ks) {
+    return Promise.all(ks.filter(function (k) { return k !== CACHE; }).map(function (k) { return caches.delete(k); }));
+  }).then(function () { return self.clients.claim(); }));
 });
-
-function fetchWithTimeout(request, ms) {
-    return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("timeout")), ms);
-        fetch(request).then(res => { clearTimeout(timer); resolve(res); }, err => { clearTimeout(timer); reject(err); });
-    });
-}
-
-self.addEventListener("fetch", event => {
-    const request = event.request;
-    if (request.method !== "GET") return;
-    const url = new URL(request.url);
-    if (url.origin !== self.location.origin) return;
-
-    // 画面本体：ネットにつながっていれば最新版、つながらなければ保存済みの画面を使う
-    if (request.mode === "navigate") {
-        event.respondWith(
-            fetchWithTimeout(request, NETWORK_TIMEOUT_MS)
-                .then(res => {
-                    if (res && res.ok) {
-                        const copy = res.clone();
-                        caches.open(CACHE_NAME).then(cache => cache.put("./index.html", copy));
-                    }
-                    return res;
-                })
-                .catch(() => caches.match("./index.html").then(r => r || caches.match("./")))
-        );
-        return;
-    }
-
-    // アイコンなど：保存済みのものを優先
-    event.respondWith(caches.match(request).then(cached => cached || fetch(request)));
+self.addEventListener('fetch', function (e) {
+  var req = e.request;
+  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  if (req.mode === 'navigate') {
+    // ネットにつながっていれば新しい版を使い、つながっていなければ保存済みの版で起動する
+    e.respondWith(fetch(req).then(function (res) {
+      var copy = res.clone(); caches.open(CACHE).then(function (c) { c.put('./index.html', copy); }); return res;
+    }).catch(function () { return caches.match('./index.html').then(function (r) { return r || caches.match('./'); }); }));
+    return;
+  }
+  e.respondWith(caches.match(req).then(function (r) { return r || fetch(req); }));
 });
