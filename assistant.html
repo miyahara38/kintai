@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>リハビリ助手 勤怠管理</title>
+<style>
+:root{--bg:#f1f5f9;--card:#fff;--line:#e2e8f0;--text:#1e293b;--sub:#64748b;--main:#2563eb;--danger:#dc2626;--ok:#059669}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;font-size:14px;padding-bottom:48px}
+header{background:#1e3a8a;color:#fff;padding:14px 16px;font-size:18px;font-weight:700}
+main{max-width:920px;margin:0 auto;padding:12px 16px;display:grid;gap:14px}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+h2{margin:0 0 12px;font-size:16px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+h3{margin:14px 0 6px;font-size:13px;color:var(--sub)}
+label{display:block;font-size:12px;font-weight:700;color:var(--sub);margin-bottom:3px}
+input,select,button{font:inherit}
+input,select{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff}
+button{border:0;border-radius:8px;padding:8px 14px;background:var(--main);color:#fff;font-weight:700;cursor:pointer}
+button.sub{background:#e2e8f0;color:var(--text)}
+button.del{background:#fee2e2;color:var(--danger);padding:6px 10px}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap}
+.row input[type=time]{width:120px}.row input[type=text]{width:140px}
+.dash{color:var(--sub)}
+.info{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 10px;font-size:13px;margin-top:10px;font-weight:700;color:#1e40af}
+.err{background:#fef2f2;border-color:#fecaca;color:var(--danger)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{background:#f8fafc;color:var(--sub);font-size:12px}
+.scroll{overflow-x:auto}
+.stats{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));margin:10px 0}
+.stat{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}
+.stat b{display:block;font-size:18px;margin-top:2px}
+details summary{cursor:pointer;font-weight:700}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:700}
+.t-full{background:#dbeafe;color:#1e40af}.t-part{background:#d1fae5;color:#065f46}
+</style>
+</head>
+<body>
+<header>🏥 リハビリ助手 勤怠管理</header>
+<main>
+
+<!-- スタッフ -->
+<section>
+  <h2>👤 スタッフ</h2>
+  <div id="staffList"></div>
+  <div class="row">
+    <input type="text" id="newStaffName" placeholder="氏名" style="width:180px">
+    <select id="newStaffType" style="width:120px"><option value="full">社員</option><option value="part">パート</option></select>
+    <button id="btnAddStaff">追加</button>
+  </div>
+</section>
+
+<!-- 入力 -->
+<section>
+  <h2>📝 勤怠の入力</h2>
+  <div class="grid">
+    <div><label>スタッフ *</label><select id="staffSel"></select></div>
+    <div><label>日付 *</label><input type="date" id="date"></div>
+    <div><label>区分</label>
+      <select id="kind">
+        <option value="work">出勤</option>
+        <option value="paidTime">有給(時間休)</option>
+        <option value="paidDay">有給(1日=8回)</option>
+        <option value="off">公休</option>
+      </select></div>
+  </div>
+
+  <div id="workBox">
+    <h3>出勤パターン(選択後に時間を手で直せます)</h3>
+    <div class="grid">
+      <div><label>パターン</label><select id="patSel"></select></div>
+      <div><label>開始</label><input type="time" id="start"></div>
+      <div><label>終了</label><input type="time" id="end"></div>
+    </div>
+    <h3>休憩(選択後に時間を手で直せます)</h3>
+    <div class="grid">
+      <div><label>休憩パターン</label><select id="brkSel"></select></div>
+      <div><label>休憩開始</label><input type="time" id="bs"></div>
+      <div><label>休憩終了</label><input type="time" id="be"></div>
+    </div>
+  </div>
+
+  <div id="leaveBox" style="display:none">
+    <h3>時間休</h3>
+    <div class="grid">
+      <div><label>時間休(1回=1時間)</label><input type="number" id="units" min="1" max="8" step="1" value="1"></div>
+    </div>
+  </div>
+
+  <div class="info" id="calc"></div>
+  <div class="row" style="margin-top:12px">
+    <button id="btnSave">登録する</button>
+    <button id="btnCancel" class="sub" style="display:none">編集をやめる</button>
+  </div>
+</section>
+
+<!-- 有給管理 -->
+<section>
+  <h2>🌴 有給管理</h2>
+  <div class="grid">
+    <div><label>スタッフ</label><select id="ledgerStaff"></select></div>
+    <div><label>付与日</label><input type="date" id="grantDate"></div>
+    <div><label>付与日数</label><input type="number" id="grantDays" min="0" step="0.5" value="10"></div>
+    <div style="align-self:end"><button id="btnGrant">付与を登録</button></div>
+  </div>
+  <div class="stats">
+    <div class="stat">付与合計<b id="stGrant">0</b></div>
+    <div class="stat">使用(回)<b id="stUsed">0</b></div>
+    <div class="stat">残り(回)<b id="stRemain">0</b></div>
+    <div class="stat">残り(日換算)<b id="stRemainDays">0</b></div>
+  </div>
+  <div class="scroll"><table><thead><tr><th>付与日</th><th>日数</th><th>回数</th><th></th></tr></thead><tbody id="grantBody"></tbody></table></div>
+  <div class="dash" style="font-size:12px;margin-top:6px">※ 1回=1時間、1日=8回で計算します。</div>
+</section>
+
+<!-- 一覧 -->
+<section>
+  <h2>📋 勤怠一覧</h2>
+  <div class="grid">
+    <div><label>スタッフ</label><select id="listStaff"></select></div>
+    <div><label>月</label><input type="month" id="listMonth"></div>
+    <div style="align-self:end"><button id="btnCsv" class="sub">CSV出力</button></div>
+  </div>
+  <div class="stats">
+    <div class="stat">出勤日数<b id="sDays">0</b></div>
+    <div class="stat">実働合計<b id="sWork">0:00</b></div>
+    <div class="stat">有給使用(回)<b id="sPaid">0</b></div>
+  </div>
+  <div class="scroll"><table>
+    <thead><tr><th>日付</th><th>スタッフ</th><th>区分</th><th>時間</th><th>休憩</th><th>実働</th><th>有給(回)</th><th></th></tr></thead>
+    <tbody id="listBody"></tbody></table></div>
+</section>
+
+<!-- 設定 -->
+<section>
+  <h2>⚙️ パターン設定</h2>
+  <details open><summary>社員の出勤パターン</summary><div id="setFull" style="margin-top:8px"></div><button class="sub" data-add="full">＋ 追加</button></details>
+  <details open style="margin-top:12px"><summary>パートの出勤パターン</summary><div id="setPart" style="margin-top:8px"></div><button class="sub" data-add="part">＋ 追加</button></details>
+  <details open style="margin-top:12px"><summary>休憩パターン(社員・パート共通)</summary><div id="setBrk" style="margin-top:8px"></div><button class="sub" data-add="brk">＋ 追加</button></details>
+  <div style="margin-top:12px"><button class="sub" id="btnReset">初期値に戻す</button></div>
+</section>
+
+</main>
+<script>
+(function(){
+'use strict';
+const KEY='rehab_assistant_v1';
+const $=id=>document.getElementById(id);
+const defaults=()=>({
+  staff:[],
+  patterns:{
+    full:[{s:'08:30',e:'18:00'},{s:'09:00',e:'18:30'}],
+    part:[{s:'08:30',e:'18:00'},{s:'09:00',e:'18:30'},{s:'08:30',e:'12:30'},{s:'08:30',e:'16:00'},{s:'08:30',e:'17:00'},{s:'14:00',e:'18:00'},{s:'14:30',e:'18:30'}]
+  },
+  breaks:[{s:'11:00',e:'12:30'},{s:'12:30',e:'14:00'},{s:'13:00',e:'14:30'}],
+  records:[],grants:[]
+});
+let st;
+try{st=JSON.parse(localStorage.getItem(KEY)||'null')}catch(e){st=null}
+if(!st||!st.patterns)st=defaults();
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}};
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const KIND={work:'出勤',paidTime:'有給(時間休)',paidDay:'有給(1日)',off:'公休'};
+const TYPE={full:'社員',part:'パート'};
+
+/* ---- 日付・時間 ---- */
+const pad=n=>String(n).padStart(2,'0');
+const localToday=()=>{const t=new Date();return t.getFullYear()+'-'+pad(t.getMonth()+1)+'-'+pad(t.getDate())};
+const toMin=t=>{if(!t)return null;const [h,m]=t.split(':').map(Number);return h*60+m};
+const fmtHM=m=>Math.floor(m/60)+':'+pad(m%60);
+let autoDate=localToday();
+$('date').value=autoDate;
+function refreshAutoDate(){
+  const t=localToday();if(t===autoDate)return;
+  const untouched=$('date').value===autoDate;autoDate=t;
+  if(untouched&&!editingId){$('date').value=t;recalc()}
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshAutoDate()});
+window.addEventListener('pageshow',refreshAutoDate);
+window.addEventListener('focus',refreshAutoDate);
+setInterval(refreshAutoDate,60000);
+
+/* ---- 計算 ---- */
+function calc(r){
+  // 勤務時間 − 休憩(勤務時間と重なる部分のみ) − 時間休
+  if(r.kind==='off')return {span:0,brk:0,work:0,units:0};
+  if(r.kind==='paidDay')return {span:0,brk:0,work:0,units:8};
+  const s=toMin(r.start),e=toMin(r.end);
+  if(s===null||e===null||e<=s)return {span:0,brk:0,work:0,units:r.kind==='paidTime'?(+r.units||0):0,invalid:true};
+  let brk=0;const bs=toMin(r.bs),be=toMin(r.be);
+  if(bs!==null&&be!==null&&be>bs)brk=Math.max(0,Math.min(e,be)-Math.max(s,bs));
+  const units=r.kind==='paidTime'?(+r.units||0):0;
+  return {span:e-s,brk,work:Math.max(0,e-s-brk-units*60),units};
+}
+
+/* ---- スタッフ ---- */
+const staffById=id=>st.staff.find(x=>x.id===id);
+function renderStaff(){
+  $('staffList').innerHTML=st.staff.length?st.staff.map(x=>
+    `<div class="row"><b>${esc(x.name)}</b><span class="tag t-${x.type}">${TYPE[x.type]}</span><button class="del" data-delstaff="${x.id}">削除</button></div>`).join(''):'<div class="dash">スタッフを追加してください。</div>';
+  const opts=st.staff.map(x=>`<option value="${x.id}">${esc(x.name)}(${TYPE[x.type]})</option>`).join('');
+  [['staffSel',false],['ledgerStaff',false],['listStaff',true]].forEach(([id,all])=>{
+    const el=$(id),cur=el.value;
+    el.innerHTML=(all?'<option value="">全員</option>':'')+opts;
+    if([...el.options].some(o=>o.value===cur))el.value=cur;
+  });
+  renderPatterns();recalc();renderLedger();renderList();
+}
+$('btnAddStaff').onclick=()=>{
+  const name=$('newStaffName').value.trim();if(!name)return;
+  st.staff.push({id:uid(),name,type:$('newStaffType').value});
+  $('newStaffName').value='';save();renderStaff();
+};
+$('staffList').onclick=e=>{
+  const id=e.target.dataset.delstaff;if(!id)return;
+  const x=staffById(id);
+  if(!confirm(`${x.name} さんと、その勤怠・有給データを削除します。よろしいですか？`))return;
+  st.staff=st.staff.filter(s=>s.id!==id);
+  st.records=st.records.filter(r=>r.staffId!==id);
+  st.grants=st.grants.filter(g=>g.staffId!==id);
+  save();renderStaff();
+};
+
+/* ---- パターン選択 ---- */
+function currentType(){const s=staffById($('staffSel').value);return s?s.type:'full'}
+function renderPatterns(){
+  const list=st.patterns[currentType()];
+  $('patSel').innerHTML=list.map((p,i)=>`<option value="${i}">${p.s}〜${p.e}</option>`).join('')+'<option value="manual">手動入力</option>';
+  $('brkSel').innerHTML=st.breaks.map((p,i)=>`<option value="${i}">${p.s}〜${p.e}</option>`).join('')+'<option value="none">休憩なし</option><option value="manual">手動入力</option>';
+  applyPattern();applyBreak();
+}
+function applyPattern(){
+  const v=$('patSel').value;if(v==='manual')return;
+  const p=st.patterns[currentType()][+v];if(!p)return;
+  $('start').value=p.s;$('end').value=p.e;
+}
+function applyBreak(){
+  const v=$('brkSel').value;if(v==='manual')return;
+  if(v==='none'){$('bs').value='';$('be').value='';return}
+  const p=st.breaks[+v];if(!p)return;
+  $('bs').value=p.s;$('be').value=p.e;
+}
+$('staffSel').onchange=()=>{renderPatterns();recalc()};
+$('patSel').onchange=()=>{applyPattern();recalc()};
+$('brkSel').onchange=()=>{applyBreak();recalc()};
+['start','end'].forEach(id=>$(id).oninput=()=>{$('patSel').value='manual';recalc()});
+['bs','be'].forEach(id=>$(id).oninput=()=>{$('brkSel').value='manual';recalc()});
+$('kind').onchange=()=>{
+  const k=$('kind').value;
+  $('workBox').style.display=(k==='work'||k==='paidTime')?'':'none';
+  $('leaveBox').style.display=k==='paidTime'?'':'none';
+  recalc();
+};
+$('units').oninput=recalc;
+$('date').oninput=recalc;
+
+function formRecord(){
+  return {kind:$('kind').value,start:$('start').value,end:$('end').value,bs:$('bs').value,be:$('be').value,units:+$('units').value||0};
+}
+function recalc(){
+  const r=formRecord(),c=calc(r),box=$('calc');
+  box.classList.remove('err');
+  if(!st.staff.length){box.textContent='先にスタッフを追加してください。';box.classList.add('err');return}
+  if(r.kind==='off'){box.textContent='公休として登録します。';return}
+  if(r.kind==='paidDay'){box.textContent='有給1日(8回)を使用します。';return}
+  if(c.invalid){box.textContent='開始・終了時間を正しく入力してください。';box.classList.add('err');return}
+  let t=`拘束 ${fmtHM(c.span)} − 休憩 ${c.brk}分`;
+  if(r.kind==='paidTime')t+=` − 時間休 ${c.units}回`;
+  box.textContent=`${t} = 実働 ${fmtHM(c.work)}`;
+}
+
+/* ---- 登録 ---- */
+let editingId=null;
+$('btnSave').onclick=()=>{
+  const staffId=$('staffSel').value,date=$('date').value;
+  if(!staffId||!date){alert('スタッフと日付を入力してください。');return}
+  const r=formRecord();
+  if((r.kind==='work'||r.kind==='paidTime')&&calc(r).invalid){alert('開始・終了時間を正しく入力してください。');return}
+  if(r.kind==='paidTime'&&(r.units<1||r.units>8)){alert('時間休は1〜8回で入力してください。');return}
+  const rec={id:editingId||uid(),staffId,date,...r};
+  // 同じスタッフ・同じ日は上書き
+  st.records=st.records.filter(x=>x.id!==rec.id&&!(x.staffId===staffId&&x.date===date));
+  st.records.push(rec);
+  stopEdit();save();renderList();renderLedger();
+};
+function stopEdit(){editingId=null;$('btnCancel').style.display='none';$('btnSave').textContent='登録する'}
+$('btnCancel').onclick=stopEdit;
+
+/* ---- 一覧 ---- */
+$('listMonth').value=localToday().slice(0,7);
+$('listStaff').onchange=renderList;$('listMonth').oninput=renderList;
+function listRows(){
+  const sid=$('listStaff').value,m=$('listMonth').value;
+  return st.records.filter(r=>(!sid||r.staffId===sid)&&(!m||r.date.startsWith(m)))
+    .sort((a,b)=>a.date.localeCompare(b.date)||a.staffId.localeCompare(b.staffId));
+}
+function renderList(){
+  const rows=listRows();let days=0,work=0,paid=0;
+  $('listBody').innerHTML=rows.map(r=>{
+    const c=calc(r),s=staffById(r.staffId);
+    if(r.kind==='work'||r.kind==='paidTime')days++;
+    work+=c.work;paid+=c.units;
+    return `<tr><td>${r.date}</td><td>${esc(s?s.name:'(削除済み)')}</td><td>${KIND[r.kind]}</td>
+      <td>${r.kind==='work'||r.kind==='paidTime'?r.start+'〜'+r.end:'-'}</td>
+      <td>${r.bs&&r.be&&r.kind!=='paidDay'&&r.kind!=='off'?r.bs+'〜'+r.be:'-'}</td>
+      <td>${r.kind==='off'||r.kind==='paidDay'?'-':fmtHM(c.work)}</td><td>${c.units||'-'}</td>
+      <td><button class="sub" data-edit="${r.id}">編集</button> <button class="del" data-del="${r.id}">削除</button></td></tr>`;
+  }).join('')||'<tr><td colspan="8" class="dash">データがありません。</td></tr>';
+  $('sDays').textContent=days;$('sWork').textContent=fmtHM(work);$('sPaid').textContent=paid;
+}
+$('listBody').onclick=e=>{
+  const d=e.target.dataset.del,ed=e.target.dataset.edit;
+  if(d){if(confirm('この記録を削除しますか？')){st.records=st.records.filter(r=>r.id!==d);save();renderList();renderLedger()}}
+  if(ed){
+    const r=st.records.find(x=>x.id===ed);if(!r)return;
+    editingId=r.id;
+    $('staffSel').value=r.staffId;renderPatterns();
+    $('date').value=r.date;$('kind').value=r.kind;$('kind').onchange();
+    $('start').value=r.start;$('end').value=r.end;$('bs').value=r.bs;$('be').value=r.be;$('units').value=r.units||1;
+    const pi=st.patterns[currentType()].findIndex(p=>p.s===r.start&&p.e===r.end);$('patSel').value=pi>=0?pi:'manual';
+    const bi=st.breaks.findIndex(p=>p.s===r.bs&&p.e===r.be);$('brkSel').value=bi>=0?bi:(r.bs?'manual':'none');
+    $('btnSave').textContent='更新する';$('btnCancel').style.display='';
+    recalc();window.scrollTo({top:0,behavior:'smooth'});
+  }
+};
+$('btnCsv').onclick=()=>{
+  const q=v=>{let s=String(v??'');if(/^[=+\-@]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'};
+  const head=['日付','スタッフ','雇用区分','区分','開始','終了','休憩開始','休憩終了','実働(分)','有給(回)'];
+  const lines=[head.map(q).join(',')];
+  listRows().forEach(r=>{const c=calc(r),s=staffById(r.staffId);
+    lines.push([r.date,s?s.name:'',s?TYPE[s.type]:'',KIND[r.kind],r.start,r.end,r.bs,r.be,c.work,c.units].map(q).join(','))});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv'}));
+  a.download='リハビリ助手勤怠_'+localToday()+'.csv';a.click();
+};
+
+/* ---- 有給 ---- */
+$('grantDate').value=localToday();
+$('ledgerStaff').onchange=renderLedger;
+$('btnGrant').onclick=()=>{
+  const staffId=$('ledgerStaff').value,date=$('grantDate').value,days=+$('grantDays').value;
+  if(!staffId||!date||!(days>0))return;
+  st.grants.push({id:uid(),staffId,date,days});save();renderLedger();
+};
+$('grantBody').onclick=e=>{
+  const id=e.target.dataset.delgrant;if(!id)return;
+  if(confirm('この付与を削除しますか？')){st.grants=st.grants.filter(g=>g.id!==id);save();renderLedger()}
+};
+function renderLedger(){
+  const sid=$('ledgerStaff').value;
+  const gs=st.grants.filter(g=>g.staffId===sid).sort((a,b)=>a.date.localeCompare(b.date));
+  const grantUnits=gs.reduce((a,g)=>a+Math.round(g.days*8),0);
+  const used=st.records.filter(r=>r.staffId===sid).reduce((a,r)=>a+calc(r).units,0);
+  const remain=grantUnits-used;
+  $('stGrant').textContent=grantUnits/8+'日';
+  $('stUsed').textContent=used+'回';
+  $('stRemain').textContent=remain+'回';
+  $('stRemainDays').textContent=Math.floor(remain/8)+'日'+(remain%8?' '+(remain%8)+'回':'');
+  $('grantBody').innerHTML=gs.map(g=>`<tr><td>${g.date}</td><td>${g.days}日</td><td>${Math.round(g.days*8)}回</td><td><button class="del" data-delgrant="${g.id}">削除</button></td></tr>`).join('')
+    ||'<tr><td colspan="4" class="dash">付与の登録がありません。</td></tr>';
+}
+
+/* ---- パターン設定 ---- */
+function renderSettings(){
+  const timeRow=(grp,i,p)=>`<div class="row"><input type="time" value="${p.s}" data-grp="${grp}" data-i="${i}" data-f="s"><span class="dash">〜</span><input type="time" value="${p.e}" data-grp="${grp}" data-i="${i}" data-f="e"><button class="del" data-rm="${grp}" data-i="${i}">削除</button></div>`;
+  $('setFull').innerHTML=st.patterns.full.map((p,i)=>timeRow('full',i,p)).join('');
+  $('setPart').innerHTML=st.patterns.part.map((p,i)=>timeRow('part',i,p)).join('');
+  $('setBrk').innerHTML=st.breaks.map((p,i)=>timeRow('brk',i,p)).join('');
+}
+const grpList=g=>g==='brk'?st.breaks:st.patterns[g];
+document.querySelector('main').addEventListener('change',e=>{
+  const t=e.target;if(!t.dataset.grp)return;
+  grpList(t.dataset.grp)[+t.dataset.i][t.dataset.f]=t.value;
+  save();renderPatterns();recalc();
+});
+document.querySelector('main').addEventListener('click',e=>{
+  const t=e.target;
+  if(t.dataset.add){grpList(t.dataset.add).push({s:'09:00',e:'18:00'});save();renderSettings();renderPatterns();recalc()}
+  if(t.dataset.rm){
+    const l=grpList(t.dataset.rm);
+    if(l.length<=1){alert('最低1つは必要です。');return}
+    l.splice(+t.dataset.i,1);save();renderSettings();renderPatterns();recalc();
+  }
+});
+$('btnReset').onclick=()=>{
+  if(!confirm('パターン設定を初期値に戻します(勤怠・有給データは消えません)。'))return;
+  const d=defaults();st.patterns=d.patterns;st.breaks=d.breaks;save();renderSettings();renderPatterns();recalc();
+};
+
+renderSettings();renderStaff();$('kind').onchange();
+})();
+</script>
+</body>
+</html>
